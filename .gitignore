@@ -1,0 +1,5 @@
+﻿target
+.idea
+.zed
+exported_files
+Cargo.lock

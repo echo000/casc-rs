@@ -1,0 +1,33 @@
+[workspace]
+
+[package]
+name = "casc-viewer"
+version = "0.1.0"
+edition = "2024"
+authors = ["echo000"]
+license = "GPL-3.0"
+
+[profile.dev]
+opt-level = 2
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
+
+[[bin]]
+name = "casc_viewer"
+path = "src/main.rs"
+
+[build-dependencies]
+embed-manifest = "1.4"
+winresource = "0.1.22"
+
+[dependencies]
+casc-rs = { path = "../../casc-rs" }
+porter-ui = { git = "https://github.com/dtzxporter/porter-lib" }
+porter-utils = { git = "https://github.com/dtzxporter/porter-lib" }
+rayon = "1.10.0"
+
+[patch.crates-io]
+iced = { git = "https://github.com/dtzxporter/iced", rev = "d4fc744243da36d7fc1c62d30b38306f2c8caa2f" }

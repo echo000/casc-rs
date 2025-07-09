@@ -1,0 +1,78 @@
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
+use std::path::Path;
+
+/// A struct to hold a Delimiter Separated Value File (DSV)
+#[derive(Debug)]
+pub struct DSVFile {
+    /// The delimiter string
+    pub delimiter: String,
+    /// The comment indicator string
+    pub comment: Option<String>,
+    /// The rows within the DSV file
+    pub rows: Vec<Vec<String>>,
+}
+
+impl DSVFile {
+    /// Initializes a new instance of the DSVFile with default delimiter (",")
+    pub fn new() -> Self {
+        Self {
+            delimiter: ",".to_string(),
+            comment: None,
+            rows: Vec::new(),
+        }
+    }
+
+    /// Initializes a new instance with a given delimiter
+    pub fn with_delimiter(delimiter: &str) -> Self {
+        Self {
+            delimiter: delimiter.to_string(),
+            comment: None,
+            rows: Vec::new(),
+        }
+    }
+
+    /// Initializes a new instance with a given file, delimiter, and optional comment string
+    pub fn from_file<P: AsRef<Path>>(
+        file: P,
+        delimiter: &str,
+        comment: Option<&str>,
+    ) -> io::Result<Self> {
+        let file = File::open(file)?;
+        let mut dsv = Self {
+            delimiter: delimiter.to_string(),
+            comment: comment.map(|s| s.to_string()),
+            rows: Vec::new(),
+        };
+        dsv.load(file)?;
+        Ok(dsv)
+    }
+
+    /// Loads DSV data from a reader (e.g., File, BufReader, etc.)
+    pub fn load<R: Read>(&mut self, reader: R) -> io::Result<()> {
+        let buffered = BufReader::new(reader);
+        let supports_commenting = self.comment.as_deref().map_or(false, |c| !c.is_empty());
+
+        for line in buffered.lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            if supports_commenting {
+                if let Some(ref comment) = self.comment {
+                    if line.starts_with(comment) {
+                        continue;
+                    }
+                }
+            }
+            let row: Vec<String> = line.split(&self.delimiter).map(|s| s.to_string()).collect();
+            self.rows.push(row);
+        }
+        Ok(())
+    }
+
+    /// Gets the header row, if any (first row)
+    pub fn header(&self) -> Option<&Vec<String>> {
+        self.rows.first()
+    }
+}

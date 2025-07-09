@@ -1,0 +1,3 @@
+[workspace]
+members = ["casc-rs"]
+resolver = "2"

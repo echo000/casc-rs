@@ -1,0 +1,62 @@
+# casc-rs
+
+A pure Rust implementation of a Casc Storage Handler, inspired by the C# version.
+This crate allows you to read and extract files from Blizzard's CASC storage format.
+
+## Crates
+
+- **casc-rs**: The core library for reading CASC storages.
+- **casc-viewer**: A GUI application for browsing and exporting files from CASC storages, built with [porter-lib](https://github.com/dtzxporter/porter-lib).
+
+---
+
+## Usage
+
+### Add to your `Cargo.toml`
+
+```toml
+[dependencies]
+casc-rs = { path = "casc-rs/casc-rs" }
+```
+
+### Example: Listing and Extracting Files
+
+```rust
+use casc_rs::casc_storage::CascStorage;
+use std::fs::File;
+use std::io::Write;
+
+fn main() {
+    // Open a CASC storage directory (containing .build.info, config, Data/)
+    let storage = CascStorage::new("path/to/casc/storage", None).unwrap();
+
+    // List all files
+    for file_info in &storage.files {
+        println!("File: {} ({} bytes)", file_info.file_name, file_info.file_size);
+    }
+
+    // Extract a file by name
+    let file_name = "some/file/in/storage.txt";
+    let mut casc_stream = storage.open_file_name(file_name).unwrap();
+    let mut output = File::create("output.txt").unwrap();
+    std::io::copy(&mut casc_stream, &mut output).unwrap();
+}
+```
+
+---
+
+## casc-viewer
+
+A GUI application for exploring and exporting files from CASC storages.
+
+- To run:
+  ```
+  cargo run -p casc-viewer
+  ```
+- Open a `.build.info` file from a CASC storage directory to browse its contents.
+
+---
+
+## License
+
+MIT
