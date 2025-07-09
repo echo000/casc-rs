@@ -1,6 +1,6 @@
 # casc-rs
 
-A pure Rust implementation of a Casc Storage Handler, inspired by the C# version.
+A pure Rust implementation of a Casc Storage Handler, inspired by the version ported to C# from C++.
 This crate allows you to read and extract files from Blizzard's CASC storage format.
 
 > **Note:** This library currently only supports CASC storages that use the TVFS root file format.
