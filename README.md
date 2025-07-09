@@ -16,7 +16,7 @@ This crate allows you to read and extract files from Blizzard's CASC storage for
 
 ```toml
 [dependencies]
-casc-rs = { path = "casc-rs/casc-rs" }
+casc-rs = { git = "https://github.com/echo000/casc-rs" }
 ```
 
 ### Example: Listing and Extracting Files
@@ -28,7 +28,7 @@ use std::io::Write;
 
 fn main() {
     // Open a CASC storage directory (containing .build.info, config, Data/)
-    let storage = CascStorage::new("path/to/casc/storage", None).unwrap();
+    let storage = CascStorage::open("path/to/casc/storage", None).unwrap();
 
     // List all files
     for file_info in &storage.files {
@@ -37,9 +37,9 @@ fn main() {
 
     // Extract a file by name
     let file_name = "some/file/in/storage.txt";
-    let mut casc_stream = storage.open_file_name(file_name).unwrap();
+    let mut casc_reader = storage.open_file(file_name).unwrap();
     let mut output = File::create("output.txt").unwrap();
-    std::io::copy(&mut casc_stream, &mut output).unwrap();
+    std::io::copy(&mut casc_reader, &mut output).unwrap();
 }
 ```
 
