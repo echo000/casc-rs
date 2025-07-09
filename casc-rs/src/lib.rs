@@ -34,9 +34,6 @@
 //! let mut output = File::create("output.txt").unwrap();
 //! std::io::copy(&mut casc_stream, &mut output).unwrap();
 //! ```
-//!
-//! ## License
-//! GPL-3.0
 
 #![allow(unused)]
 mod block_table;
@@ -51,6 +48,7 @@ mod casc_span_header;
 pub mod casc_storage;
 mod entry;
 mod ext;
+mod path_table_node_flags;
 mod span_info;
 mod tvfs_root_handler;
 mod utility;

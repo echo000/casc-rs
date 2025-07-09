@@ -1,5 +1,6 @@
 use crate::entry::Entry;
 use crate::ext::io_ext::{ArrayReadExt, ReadExt, SeekExt};
+use crate::path_table_node_flags::PathTableNodeFlags;
 use crate::span_info::SpanInfo;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::collections::HashMap;
@@ -45,16 +46,6 @@ impl TVFSHeader {
             cft_table_size: reader.read_i32::<BigEndian>()?,
             max_depth: reader.read_u16::<BigEndian>()?,
         })
-    }
-}
-
-bitflags::bitflags! {
-    #[derive(Default, Debug, Clone)]
-    pub struct PathTableNodeFlags: u32 {
-        const NONE = 0x0000;
-        const PATH_SEPARATOR_PRE = 0x0001;
-        const PATH_SEPARATOR_POST = 0x0002;
-        const IS_NODE_VALUE = 0x0004;
     }
 }
 
