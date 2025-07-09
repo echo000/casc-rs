@@ -56,7 +56,3 @@ A GUI application for exploring and exporting files from CASC storages.
 - Open a `.build.info` file from a CASC storage directory to browse its contents.
 
 ---
-
-## License
-
-MIT
