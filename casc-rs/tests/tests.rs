@@ -5,11 +5,20 @@ use casc_rs::casc_storage::CascStorage;
 #[test]
 fn test_load_file_name() {
     println!("Test started");
-    let storage = CascStorage::new(STORAGE, None);
+    let storage = CascStorage::open(STORAGE, None);
     assert!(storage.is_ok());
     println!("Storage loaded successfully");
     let unwrapped_storage = storage.unwrap();
-    let file = unwrapped_storage.open_file_name(TEST_FILE);
+    let file = unwrapped_storage.open_file(TEST_FILE);
     println!("File opened successfully");
     assert!(file.is_ok());
+
+    // Write the file to xyz.dat in the current directory
+    use std::fs::File as StdFile;
+    use std::io::copy;
+
+    let mut casc_stream = file.unwrap();
+    let mut output = StdFile::create("xyz.dat").expect("Failed to create xyz.dat");
+    let bytes_copied = copy(&mut casc_stream, &mut output).expect("Failed to write file");
+    println!("Wrote {} bytes to xyz.dat", bytes_copied);
 }

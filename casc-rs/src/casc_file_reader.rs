@@ -8,7 +8,8 @@ use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom};
 ///
 /// This struct manages reading, seeking, and caching data from multiple file spans,
 /// handling decompression and decryption as needed.
-pub struct CascFileStream {
+
+pub struct CascFileReader {
     /// The spans that make up the file.
     pub spans: Vec<CascFileSpan<File>>,
     /// The total size of the file.
@@ -24,10 +25,12 @@ pub struct CascFileStream {
     /// End position of the cache
     cache_end_position: u64,
 }
-impl CascFileStream {
-    /// Creates a new `CascFileStream` from the given spans and size.
+
+impl CascFileReader {
+    /// Creates a new `CascFileReader` from the given spans and size.
+
     pub(crate) fn new(spans: Vec<CascFileSpan<File>>, size: u64) -> Self {
-        CascFileStream {
+        CascFileReader {
             spans,
             internal_size: size,
             internal_position: 0,
@@ -43,7 +46,8 @@ impl CascFileStream {
         self.internal_size
     }
 }
-impl Read for CascFileStream {
+
+impl Read for CascFileReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self.is_open {
             return Err(Error::new(ErrorKind::Other, "Stream is closed"));
@@ -103,10 +107,7 @@ impl Read for CascFileStream {
                 })
                 .ok_or_else(|| Error::other("Frame not found"))?;
             // Lock the span reader
-            let span_reader = span
-                .span_reader
-                .as_mut()
-                .ok_or_else(|| Error::other("Span reader not found"))?;
+            let mut span_reader = span.span_reader.try_clone()?;
             span_reader.seek(SeekFrom::Start(frame.archive_offset))?;
             self.cache_start_position = frame.virtual_start_offset;
             self.cache_end_position = self.cache_start_position + frame.content_size as u64;
@@ -134,7 +135,7 @@ impl Read for CascFileStream {
     }
 }
 
-impl Seek for CascFileStream {
+impl Seek for CascFileReader {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         match pos {
             SeekFrom::Start(offset) => self.internal_position = offset,

@@ -4,10 +4,11 @@ use crate::{
     casc_config::CascConfig,
     casc_file_frame::CascFileFrame,
     casc_file_info::CascFileInfo,
+    casc_file_reader::CascFileReader,
     casc_file_span::CascFileSpan,
-    casc_file_stream::CascFileStream,
     casc_key_mapping_table::{CascKeyMappingTable, CascKeyMappingTableEntry},
     casc_span_header::CascSpanHeader,
+    error::CascError,
     ext::io_ext::{ArrayReadExt, StructReadExt},
     tvfs_root_handler::TVFSRootHandler,
 };
@@ -34,10 +35,10 @@ pub struct CascStorage {
 }
 
 impl CascStorage {
-    pub fn new<P: AsRef<Path>>(
+    pub fn open<P: AsRef<Path>>(
         folder: P,
         handler: Option<TVFSRootHandler>,
-    ) -> Result<Self, io::Error> {
+    ) -> Result<Self, CascError> {
         let f = folder.as_ref();
         let data_path = f.join("Data").join("data");
 
@@ -81,8 +82,8 @@ impl CascStorage {
         })
     }
 
-    fn load_build_info(storage_path: &str) -> Result<CascBuildInfo, io::Error> {
-        fn find_build_info<P: AsRef<Path>>(dir: P) -> Option<std::path::PathBuf> {
+    fn load_build_info(storage_path: &str) -> Result<CascBuildInfo, CascError> {
+        fn find_build_info<P: AsRef<Path>>(dir: P) -> Option<PathBuf> {
             for entry in fs::read_dir(dir).ok()? {
                 let entry = entry.ok()?;
                 let path = entry.path();
@@ -102,9 +103,8 @@ impl CascStorage {
             build_info.load(&path)?;
             Ok(build_info)
         } else {
-            Err(io::Error::new(
-                ErrorKind::NotFound,
-                "Failed to locate Build Info",
+            Err(CascError::FileNotFound(
+                "Failed to locate Build Info".into(),
             ))
         }
     }
@@ -112,7 +112,7 @@ impl CascStorage {
     fn load_config_info(
         build_info: &CascBuildInfo,
         storage_path: &str,
-    ) -> Result<CascConfig, io::Error> {
+    ) -> Result<CascConfig, CascError> {
         fn find_config<P: AsRef<Path>>(dir: P, build_key: &str) -> Option<std::path::PathBuf> {
             for entry in fs::read_dir(dir).ok()? {
                 let entry = entry.ok()?;
@@ -134,18 +134,17 @@ impl CascStorage {
             config.load(&path)?;
             Ok(config)
         } else {
-            Err(io::Error::new(
-                ErrorKind::NotFound,
-                "Failed to locate Config Info",
+            Err(CascError::FileNotFound(
+                "Failed to locate Config Info".into(),
             ))
         }
     }
-    fn load_data_files(data_path: &str) -> Result<Vec<File>, io::Error> {
+    fn load_data_files(data_path: &str) -> Result<Vec<File>, CascError> {
         let pattern = format!("{}/data.*", data_path);
         let mut indexed_files: Vec<(usize, PathBuf)> = Vec::new();
 
         for entry in glob(&pattern).expect("Failed to read glob pattern") {
-            let path = entry.map_err(|e| io::Error::other(format!("{e}")))?;
+            let path = entry.map_err(|e| CascError::Other(format!("{e}")))?;
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if let Ok(index) = ext.parse::<usize>() {
                     indexed_files.push((index, path));
@@ -163,7 +162,7 @@ impl CascStorage {
 
         data_files
             .into_iter()
-            .map(|opt| opt.ok_or_else(|| io::Error::new(ErrorKind::NotFound, "Missing data file")))
+            .map(|opt| opt.ok_or_else(|| CascError::FileNotFound("Missing data file".to_string())))
             .collect()
     }
 
@@ -172,7 +171,7 @@ impl CascStorage {
         handler: Option<TVFSRootHandler>,
         data_files: &[File],
         entries: &HashMap<String, CascKeyMappingTableEntry>,
-    ) -> Result<TVFSRootHandler, io::Error> {
+    ) -> Result<TVFSRootHandler, CascError> {
         // If handler already exists, just return it
         if let Some(existing_handler) = handler {
             return Ok(existing_handler);
@@ -181,11 +180,11 @@ impl CascStorage {
         // Get the "vfs-root" key from config
         let key = config
             .get("vfs-root")
-            .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "vfs-root not in config"))?;
+            .ok_or_else(|| CascError::Other("vfs-root not in config".to_string()))?;
 
         let hex_bytes = hex::decode(&key.values[1]) // assuming config.get returns a struct with .values[1]
             .map_err(|_| {
-                io::Error::new(ErrorKind::InvalidData, "Invalid hex in vfs-root")
+                CascError::InvalidData("Invalid hex in vfs-root".to_string())
             })?;
 
         let base64 = BASE64_STANDARD.encode(&hex_bytes);
@@ -193,15 +192,12 @@ impl CascStorage {
 
         // Look up entry by transformed key
         let entry = entries.get(base64_key).ok_or_else(|| {
-            io::Error::new(
-                ErrorKind::NotFound,
-                format!("Entry not found in entries: {base64_key}"),
-            )
+            CascError::FileNotFound(format!("Entry not found in entries: {base64_key}"))
         })?;
 
         // Open the stream
-        let mut stream = Self::open_file(entry, data_files)
-            .map_err(|_| io::Error::new(ErrorKind::Other, "Failed to open entry file"))?;
+        let mut stream = Self::open_file_from_entry(entry, data_files)
+            .map_err(|_| CascError::Other("Failed to open entry file".to_string()))?;
 
         // Read the first 4 bytes
         let mut header_buf = [0u8; 4];
@@ -213,7 +209,7 @@ impl CascStorage {
         // Match on header
         let root_handler = match u32::from_le_bytes(header_buf) {
             0x53465654 => TVFSRootHandler::new(&mut stream)?,
-            _ => return Err(io::Error::new(ErrorKind::InvalidData, "Invalid VFS header")),
+            _ => return Err(CascError::InvalidData("Invalid VFS header".to_string())),
         };
 
         Ok(root_handler)
@@ -222,7 +218,7 @@ impl CascStorage {
     fn load_files(
         handler: &TVFSRootHandler,
         entries: &HashMap<String, CascKeyMappingTableEntry>,
-    ) -> Result<Vec<CascFileInfo>, io::Error> {
+    ) -> Result<Vec<CascFileInfo>, CascError> {
         let mut files = Vec::new();
         for (name, entry) in &handler.file_entries {
             let mut info = CascFileInfo {
@@ -245,15 +241,16 @@ impl CascStorage {
         Ok(files)
     }
 
-    pub fn open_file_name(&self, entry: &str) -> Result<CascFileStream, io::Error> {
-        let entry = self.root_handler.file_entries.get(entry).ok_or_else(|| {
-            io::Error::new(ErrorKind::NotFound, format!("Entry not found: {entry}"))
-        })?;
+    pub fn open_file(&self, entry: &str) -> Result<CascFileReader, CascError> {
+        let entry = self
+            .root_handler
+            .file_entries
+            .get(entry)
+            .ok_or_else(|| CascError::FileNotFound(format!("Entry not found: {entry}")))?;
         let mut virtual_offset = 0u64;
         let mut spans: Vec<CascFileSpan<File>> = Vec::new();
 
         for span in &entry.spans {
-            let mut new_span = CascFileSpan::<File>::new();
             if let Some(e) = self.entries.get(&span.base64_encoding_key) {
                 let mut reader = self.data_files[e.archive_index as usize].try_clone()?;
                 reader.seek(SeekFrom::Start(e.offset))?;
@@ -263,10 +260,10 @@ impl CascStorage {
                 let header = reader.read_struct::<BlockTableHeader>()?;
 
                 if header.signature != 0x45544C42 {
-                    return Err(io::Error::new(
-                        ErrorKind::InvalidData,
-                        "Invalid Block Table Header signature",
-                    ));
+                    return Err(CascError::InvalidData(
+                        "Invalid Block Table Header signature".to_string(),
+                    )
+                    .into());
                 }
 
                 // Bitshift the i24BE to u32 LE
@@ -277,9 +274,10 @@ impl CascStorage {
                     reader.read_array::<BlockTableEntry>(frame_count as usize)?;
                 let mut archive_offset = reader.stream_position()?;
 
-                new_span.archive_offset = archive_offset;
-                new_span.virtual_start_offset = virtual_offset;
-                new_span.virtual_end_offset = virtual_offset;
+                let mut span_archive_offset = archive_offset;
+                let mut span_virtual_start_offset = virtual_offset;
+                let mut span_virtual_end_offset = virtual_offset;
+                let mut frames = Vec::new();
 
                 for block_table_frame in block_table_frames {
                     //Swap from BE to LE
@@ -292,23 +290,29 @@ impl CascStorage {
                         virtual_start_offset: virtual_offset,
                         virtual_end_offset: virtual_offset + content_size as u64,
                     };
-                    new_span.virtual_end_offset += frame.content_size as u64;
+                    span_virtual_end_offset += frame.content_size as u64;
                     archive_offset += encoded_size as u64;
                     virtual_offset += content_size as u64;
-                    new_span.frames.push(frame);
+                    frames.push(frame);
                 }
 
-                new_span.span_reader = Some(reader);
+                let mut new_span = CascFileSpan::<File>::new(
+                    reader,
+                    span_virtual_start_offset,
+                    virtual_offset,
+                    span_archive_offset,
+                    frames,
+                );
                 spans.push(new_span);
             };
         }
-        Ok(CascFileStream::new(spans, virtual_offset))
+        Ok(CascFileReader::new(spans, virtual_offset))
     }
 
-    pub(crate) fn open_file(
+    pub(crate) fn open_file_from_entry(
         entry: &CascKeyMappingTableEntry,
         data_files: &[File],
-    ) -> Result<CascFileStream, io::Error> {
+    ) -> Result<CascFileReader, CascError> {
         let mut virtual_offset = 0u64;
         let mut spans: Vec<CascFileSpan<File>> = Vec::new();
 
@@ -321,9 +325,8 @@ impl CascStorage {
         let header = reader.read_struct::<BlockTableHeader>()?;
 
         if header.signature != 0x45544C42 {
-            return Err(io::Error::new(
-                ErrorKind::InvalidData,
-                "Invalid Block Table Header signature",
+            return Err(CascError::InvalidData(
+                "Invalid Block Table Header signature".to_string(),
             ));
         }
 
@@ -334,10 +337,10 @@ impl CascStorage {
         let block_table_frames = reader.read_array::<BlockTableEntry>(frame_count as usize)?;
         let mut archive_offset = reader.stream_position()?;
 
-        let mut new_span = CascFileSpan::<File>::new();
-        new_span.archive_offset = archive_offset;
-        new_span.virtual_start_offset = virtual_offset;
-        new_span.virtual_end_offset = virtual_offset;
+        let mut span_archive_offset = archive_offset;
+        let mut span_virtual_start_offset = virtual_offset;
+        let mut span_virtual_end_offset = virtual_offset;
+        let mut frames = Vec::new();
 
         for block_table_frame in block_table_frames {
             //Swap from BE to LE
@@ -350,15 +353,21 @@ impl CascStorage {
                 virtual_start_offset: virtual_offset,
                 virtual_end_offset: virtual_offset + content_size as u64,
             };
-            new_span.virtual_end_offset += frame.content_size as u64;
+            span_virtual_end_offset += frame.content_size as u64;
             archive_offset += encoded_size as u64;
             virtual_offset += content_size as u64;
-            new_span.frames.push(frame);
+            frames.push(frame);
         }
 
-        new_span.span_reader = Some(reader);
+        let mut new_span = CascFileSpan::<File>::new(
+            reader,
+            span_virtual_start_offset,
+            virtual_offset,
+            span_archive_offset,
+            frames,
+        );
         spans.push(new_span);
 
-        Ok(CascFileStream::new(spans, virtual_offset))
+        Ok(CascFileReader::new(spans, virtual_offset))
     }
 }

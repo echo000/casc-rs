@@ -1,3 +1,4 @@
+use crate::error::CascError;
 /// Module for handling CASC key mapping tables, which map encoding keys to file offsets and sizes.
 ///
 /// This module provides structures and functions for parsing and working with key mapping tables
@@ -54,7 +55,7 @@ impl CascKeyMappingTable {
     pub(crate) fn new(
         file_name: &PathBuf,
         entries: &mut HashMap<String, CascKeyMappingTableEntry>,
-    ) -> io::Result<Self> {
+    ) -> Result<Self, CascError> {
         let mut file = File::open(file_name)?;
 
         let header_size = file.read_u32::<LittleEndian>()?;
@@ -71,9 +72,8 @@ impl CascKeyMappingTable {
         let file_size = file.read_u64::<LittleEndian>()?;
 
         if encoded_size_length != 4 && encoding_key_length != 9 && storage_offset_length != 5 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid Data Sizes in Key Mapping Table",
+            return Err(CascError::FileCorrupted(
+                "Invalid Data Sizes in Key Mapping Table".into(),
             ));
         }
 

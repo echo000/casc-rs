@@ -43,7 +43,9 @@ where
             }
             let s = std::str::from_utf8(&buf[..char_len])
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UTF-8"))?;
-            let ch = s.chars().next().unwrap();
+            let ch = s.chars().next().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "Failed to convert to char")
+            })?;
             chars.push(ch);
         }
         Ok(chars)

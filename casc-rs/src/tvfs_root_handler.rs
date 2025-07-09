@@ -1,4 +1,5 @@
 use crate::entry::Entry;
+use crate::error::CascError;
 use crate::ext::io_ext::{ArrayReadExt, ReadExt, SeekExt};
 use crate::path_table_node_flags::PathTableNodeFlags;
 use crate::span_info::SpanInfo;
@@ -72,7 +73,7 @@ pub struct TVFSRootHandler {
 }
 
 impl TVFSRootHandler {
-    pub fn new<R: Read + Seek>(stream: &mut R) -> io::Result<Self> {
+    pub fn new<R: Read + Seek>(stream: &mut R) -> Result<Self, CascError> {
         stream.seek(SeekFrom::Start(0))?;
         let mut reader = BufReader::new(stream);
         let header = TVFSHeader::read(&mut reader)?;
@@ -102,7 +103,7 @@ impl TVFSRootHandler {
         Ok(handler)
     }
 
-    fn parse_path_node(&mut self) -> io::Result<PathTableNode> {
+    fn parse_path_node(&mut self) -> Result<PathTableNode, CascError> {
         let mut entry = PathTableNode::default();
 
         let mut buf = self.path_table_reader.peek_byte()?;
@@ -137,7 +138,7 @@ impl TVFSRootHandler {
         Ok(entry)
     }
 
-    fn add_entry(&mut self, name: String, vfs_info_pos: u64) -> io::Result<()> {
+    fn add_entry(&mut self, name: String, vfs_info_pos: u64) -> Result<(), CascError> {
         self.vfs_table_reader.set_position(vfs_info_pos);
 
         let span_count = self.vfs_table_reader.read_u8()?;
@@ -162,8 +163,11 @@ impl TVFSRootHandler {
         Ok(())
     }
 
-    fn read_variable_size_int<R: Read + Seek>(reader: &mut R, data_size: usize) -> io::Result<u32> {
-        if data_size > 0xFFFFFF {
+    fn read_variable_size_int<R: Read + Seek>(
+        reader: &mut R,
+        data_size: usize,
+    ) -> Result<u32, CascError> {
+        let data = if data_size > 0xFFFFFF {
             // Read 4 bytes (32 bits, big-endian)
             reader.read_u32::<BigEndian>()
         } else if data_size > 0xFFFF {
@@ -177,28 +181,29 @@ impl TVFSRootHandler {
         } else {
             // Read 1 byte
             reader.read_u8().map(|v| v as u32)
-        }
+        };
+        data.map_err(|e| CascError::Io(e))
     }
 
-    fn parse(&mut self, end: u64, mut builder: String) -> io::Result<()> {
+    fn parse(&mut self, end: u64, mut builder: String) -> Result<(), CascError> {
         let current_size = builder.len();
 
         while self.path_table_reader.position() < end {
             let entry = self.parse_path_node()?;
 
             // Build name with flags
-            if entry.flags.contains(PathTableNodeFlags::PATH_SEPARATOR_PRE) {
+            if entry.flags.has_flag(PathTableNodeFlags::PATH_SEPARATOR_PRE) {
                 builder.push('\\');
             }
             builder.push_str(&entry.name);
             if entry
                 .flags
-                .contains(PathTableNodeFlags::PATH_SEPARATOR_POST)
+                .has_flag(PathTableNodeFlags::PATH_SEPARATOR_POST)
             {
                 builder.push('\\');
             }
 
-            if entry.flags.contains(PathTableNodeFlags::IS_NODE_VALUE) {
+            if entry.flags.has_flag(PathTableNodeFlags::IS_NODE_VALUE) {
                 if let Some(val) = entry.value {
                     if (val as u32 & 0x8000_0000) != 0 {
                         let folder_size = val & 0x7FFF_FFFF;

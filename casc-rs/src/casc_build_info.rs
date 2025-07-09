@@ -1,10 +1,10 @@
+use crate::error::CascError;
+use crate::utility::dsv_file::DSVFile;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-
-use crate::utility::dsv_file::DSVFile;
 
 /// Represents build information loaded from a CASC `.build.info` file.
 #[derive(Debug)]
@@ -44,7 +44,7 @@ impl CascBuildInfo {
     /// # Arguments
     ///
     /// * `file_name` - The path to the `.build.info` file.
-    pub(crate) fn with_file(file_name: &PathBuf) -> Result<Self, io::Error> {
+    pub(crate) fn with_file(file_name: &PathBuf) -> Result<Self, CascError> {
         let mut instance = CascBuildInfo::new();
         instance.load(file_name)?;
         Ok(instance)
@@ -69,21 +69,23 @@ impl CascBuildInfo {
     /// # Arguments
     ///
     /// * `file_name` - The path to the `.build.info` file.
-    pub(crate) fn load<P: AsRef<Path>>(&mut self, file_name: P) -> io::Result<()> {
+    pub(crate) fn load<P: AsRef<Path>>(&mut self, file_name: P) -> Result<(), CascError> {
         let dsv = DSVFile::from_file(file_name, "|", Some("#"))?;
         let rows = dsv.rows;
         if rows.len() < 2 {
-            return Err(io::Error::other("Not enough rows"));
+            return Err(CascError::FileCorrupted("Not enough rows".into()));
         }
         let header = &rows[0];
         let data = &rows[1];
         if header.len() != data.len() {
-            return Err(io::Error::other("Header/data length mismatch"));
+            return Err(CascError::FileCorrupted(
+                "Header/data length mismatch".to_string(),
+            ));
         }
         for (info, value) in header.iter().zip(data.iter()) {
             let split: Vec<&str> = info.split('!').collect();
             if split.len() < 2 {
-                return Err(io::Error::other("Header format invalid"));
+                return Err(CascError::FileCorrupted("Header format invalid".into()));
             }
             let var = Variable {
                 name: split[0].to_string(),

@@ -6,8 +6,18 @@
 //! ## Features
 //! - Read and parse CASC storages (WoW, Overwatch, etc.)
 //! - List files and their metadata
-//! - Extract files by name or key
-//! - No external dependencies (pure Rust, except for compression)
+//! - Extract files by name
+//!
+//! ## CascStorage
+//! The main entry point for interacting with CASC archives is the [`CascStorage`](crate::casc_storage::CascStorage) struct. It provides methods to open a CASC storage directory, list available files, and extract file contents. `CascStorage` handles parsing the storage's metadata, configuration, and file tables, allowing you to work with Blizzard game data archives in a high-level, ergonomic way.
+//!
+//! Typical usage involves creating a `CascStorage` instance with the path to your storage directory, then using its methods to list or extract files. See the example below for a typical workflow.
+//!
+//! ## CascFileReader
+//! The [`CascFileReader`](crate::casc_file_reader::CascFileReader) struct provides stream-like, read and seek access to the contents of files stored in a CASC archive. It is returned by methods such as `CascStorage::open_file_name` and implements the standard `Read` and `Seek` traits, allowing you to process file data just like with `std::fs::File`. This makes it easy to extract, process, or copy file contents from the archive in an idiomatic Rust way.
+//!
+//! ## Error Handling
+//! All fallible operations in this crate return a [`CascError`](crate::error::CascError) type, which provides detailed information about possible errors such as file not found, invalid data, unsupported file types, I/O errors, and more. You can use standard Rust error handling patterns (`?`, `match`, etc.) to work with these errors.
 //!
 //! ## Usage
 //! Add to your `Cargo.toml`:
@@ -41,12 +51,13 @@ mod casc_build_info;
 mod casc_config;
 mod casc_file_frame;
 mod casc_file_info;
+pub mod casc_file_reader;
 mod casc_file_span;
-pub mod casc_file_stream;
 mod casc_key_mapping_table;
 mod casc_span_header;
 pub mod casc_storage;
 mod entry;
+pub mod error;
 mod ext;
 mod path_table_node_flags;
 mod span_info;
