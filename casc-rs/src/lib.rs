@@ -13,7 +13,7 @@
 //! Add to your `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! casc-rs = "0.2"
+//! casc-rs = "0.1"
 //! ```
 //!
 //! ### Example: Listing and Extracting Files
