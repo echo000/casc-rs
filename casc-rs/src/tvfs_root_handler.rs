@@ -7,6 +7,9 @@ use std::io;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::string::String;
 
+/// Represents the header of a TVFS root structure in a CASC archive.
+///
+/// This header contains metadata about the TVFS tables and their locations.
 #[repr(C, packed)]
 #[derive(Debug, Clone)]
 pub struct TVFSHeader {
@@ -55,6 +58,9 @@ bitflags::bitflags! {
     }
 }
 
+/// Represents a node in the TVFS path table.
+///
+/// Each node may represent a directory or file path component.
 #[derive(Debug, Default, Clone)]
 pub struct PathTableNode {
     pub name: String,
@@ -62,6 +68,9 @@ pub struct PathTableNode {
     pub value: Option<i32>,
 }
 
+/// Handles the TVFS root structure, including path and VFS tables, for a CASC archive.
+///
+/// Provides access to file entries and table readers for further processing.
 #[derive(Debug)]
 pub struct TVFSRootHandler {
     pub path_table_reader: Cursor<Vec<u8>>,
@@ -102,7 +111,7 @@ impl TVFSRootHandler {
         Ok(handler)
     }
 
-    pub fn parse_path_node(&mut self) -> io::Result<PathTableNode> {
+    fn parse_path_node(&mut self) -> io::Result<PathTableNode> {
         let mut entry = PathTableNode::default();
 
         let mut buf = self.path_table_reader.peek_byte()?;
@@ -162,10 +171,7 @@ impl TVFSRootHandler {
         Ok(())
     }
 
-    pub fn read_variable_size_int<R: Read + Seek>(
-        reader: &mut R,
-        data_size: usize,
-    ) -> io::Result<u32> {
+    fn read_variable_size_int<R: Read + Seek>(reader: &mut R, data_size: usize) -> io::Result<u32> {
         if data_size > 0xFFFFFF {
             // Read 4 bytes (32 bits, big-endian)
             reader.read_u32::<BigEndian>()

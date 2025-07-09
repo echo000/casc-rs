@@ -14,15 +14,15 @@ pub struct CascBuildInfo {
 
 /// Represents a variable entry in the build info.
 #[derive(Debug)]
-pub struct Variable {
-    pub name: String,
-    pub var_type: String,
-    pub value: String,
+pub(crate) struct Variable {
+    pub(crate) name: String,
+    pub(crate) var_type: String,
+    pub(crate) value: String,
 }
 
 impl Variable {
     /// Creates a new `Variable` with the given name, type, and value.
-    pub fn new(name: String, var_type: String, value: String) -> Self {
+    pub(crate) fn new(name: String, var_type: String, value: String) -> Self {
         Variable {
             name,
             var_type,
@@ -33,7 +33,7 @@ impl Variable {
 
 impl CascBuildInfo {
     /// Creates a new, empty `CascBuildInfo`.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         CascBuildInfo {
             variables: HashMap::new(),
         }
@@ -44,7 +44,7 @@ impl CascBuildInfo {
     /// # Arguments
     ///
     /// * `file_name` - The path to the `.build.info` file.
-    pub fn with_file(file_name: &PathBuf) -> Result<Self, io::Error> {
+    pub(crate) fn with_file(file_name: &PathBuf) -> Result<Self, io::Error> {
         let mut instance = CascBuildInfo::new();
         instance.load(file_name)?;
         Ok(instance)
@@ -56,7 +56,7 @@ impl CascBuildInfo {
     ///
     /// * `var_name` - The name of the variable to retrieve.
     /// * `default_value` - The value to return if the variable is not found.
-    pub fn get(&self, var_name: &str, default_value: &str) -> String {
+    pub(crate) fn get(&self, var_name: &str, default_value: &str) -> String {
         if let Some(var) = self.variables.get(var_name) {
             var.value.clone()
         } else {
@@ -69,7 +69,7 @@ impl CascBuildInfo {
     /// # Arguments
     ///
     /// * `file_name` - The path to the `.build.info` file.
-    pub fn load<P: AsRef<Path>>(&mut self, file_name: P) -> io::Result<()> {
+    pub(crate) fn load<P: AsRef<Path>>(&mut self, file_name: P) -> io::Result<()> {
         let dsv = DSVFile::from_file(file_name, "|", Some("#"))?;
         let rows = dsv.rows;
         if rows.len() < 2 {

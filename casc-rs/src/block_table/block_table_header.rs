@@ -2,13 +2,13 @@
 /// Represents the header of a block table in a CASC storage.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct BlockTableHeader {
+pub(crate) struct BlockTableHeader {
     /// The signature identifying the block table.
-    pub signature: u32,
+    pub(crate) signature: u32,
     /// The size of the header in bytes.
-    pub header_size: u32,
+    pub(crate) header_size: u32,
     /// The format version of the table.
-    pub table_format: u8,
+    pub(crate) table_format: u8,
     /// The number of frames in the table (i24).
-    pub frame_count: [u8; 3],
+    pub(crate) frame_count: [u8; 3],
 }

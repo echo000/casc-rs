@@ -3,7 +3,7 @@
 /// This enum describes how the data in a block table entry is stored or compressed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum BlockTableEncoderType {
+pub(crate) enum BlockTableEncoderType {
     /// Plain raw data, uncompressed and unencrypted.
     Raw = 0x4E,
     /// Zlib compressed data.

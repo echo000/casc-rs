@@ -7,15 +7,15 @@ use std::io::Read;
 /// including its offsets and the frames it contains.
 pub struct CascFileSpan<R: Read> {
     /// The reader for the span (if any).
-    pub span_reader: Option<R>,
+    pub(crate) span_reader: Option<R>,
     /// The virtual start offset of the span.
-    pub virtual_start_offset: u64,
+    pub(crate) virtual_start_offset: u64,
     /// The virtual end offset of the span.
-    pub virtual_end_offset: u64,
+    pub(crate) virtual_end_offset: u64,
     /// The archive offset of the span.
-    pub archive_offset: u64,
+    pub(crate) archive_offset: u64,
     /// The file frames within this span.
-    pub frames: Vec<CascFileFrame>,
+    pub(crate) frames: Vec<CascFileFrame>,
 }
 
 impl<R: Read> CascFileSpan<R> {
@@ -24,7 +24,7 @@ impl<R: Read> CascFileSpan<R> {
     /// # Returns
     ///
     /// A `CascFileSpan` with all offsets set to zero and no frames.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             span_reader: None,
             virtual_start_offset: 0,

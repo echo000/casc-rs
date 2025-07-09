@@ -170,7 +170,7 @@ impl CascStorage {
     fn load_root_handler(
         config: &CascConfig,
         handler: Option<TVFSRootHandler>,
-        data_files: &Vec<File>,
+        data_files: &[File],
         entries: &HashMap<String, CascKeyMappingTableEntry>,
     ) -> Result<TVFSRootHandler, io::Error> {
         // If handler already exists, just return it
@@ -305,13 +305,12 @@ impl CascStorage {
         Ok(CascFileStream::new(spans, virtual_offset))
     }
 
-    pub fn open_file(
+    pub(crate) fn open_file(
         entry: &CascKeyMappingTableEntry,
-        data_files: &Vec<File>,
+        data_files: &[File],
     ) -> Result<CascFileStream, io::Error> {
         let mut virtual_offset = 0u64;
         let mut spans: Vec<CascFileSpan<File>> = Vec::new();
-        let mut new_span = CascFileSpan::<File>::new();
 
         // Clone the file handle for independent reading
         let mut reader = data_files[entry.archive_index as usize].try_clone()?;
@@ -335,6 +334,7 @@ impl CascStorage {
         let block_table_frames = reader.read_array::<BlockTableEntry>(frame_count as usize)?;
         let mut archive_offset = reader.stream_position()?;
 
+        let mut new_span = CascFileSpan::<File>::new();
         new_span.archive_offset = archive_offset;
         new_span.virtual_start_offset = virtual_offset;
         new_span.virtual_end_offset = virtual_offset;

@@ -4,18 +4,18 @@ use std::path::Path;
 
 /// A struct to hold a Delimiter Separated Value File (DSV)
 #[derive(Debug)]
-pub struct DSVFile {
+pub(crate) struct DSVFile {
     /// The delimiter string
-    pub delimiter: String,
+    delimiter: String,
     /// The comment indicator string
-    pub comment: Option<String>,
+    comment: Option<String>,
     /// The rows within the DSV file
-    pub rows: Vec<Vec<String>>,
+    pub(crate) rows: Vec<Vec<String>>,
 }
 
 impl DSVFile {
     /// Initializes a new instance of the DSVFile with default delimiter (",")
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             delimiter: ",".to_string(),
             comment: None,
@@ -24,7 +24,7 @@ impl DSVFile {
     }
 
     /// Initializes a new instance with a given delimiter
-    pub fn with_delimiter(delimiter: &str) -> Self {
+    pub(crate) fn with_delimiter(delimiter: &str) -> Self {
         Self {
             delimiter: delimiter.to_string(),
             comment: None,
@@ -33,7 +33,7 @@ impl DSVFile {
     }
 
     /// Initializes a new instance with a given file, delimiter, and optional comment string
-    pub fn from_file<P: AsRef<Path>>(
+    pub(crate) fn from_file<P: AsRef<Path>>(
         file: P,
         delimiter: &str,
         comment: Option<&str>,
@@ -49,7 +49,7 @@ impl DSVFile {
     }
 
     /// Loads DSV data from a reader (e.g., File, BufReader, etc.)
-    pub fn load<R: Read>(&mut self, reader: R) -> io::Result<()> {
+    pub(crate) fn load<R: Read>(&mut self, reader: R) -> io::Result<()> {
         let buffered = BufReader::new(reader);
         let supports_commenting = self.comment.as_deref().map_or(false, |c| !c.is_empty());
 
@@ -72,7 +72,7 @@ impl DSVFile {
     }
 
     /// Gets the header row, if any (first row)
-    pub fn header(&self) -> Option<&Vec<String>> {
+    pub(crate) fn header(&self) -> Option<&Vec<String>> {
         self.rows.first()
     }
 }

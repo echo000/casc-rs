@@ -1,3 +1,7 @@
+/// Module for handling CASC key mapping tables, which map encoding keys to file offsets and sizes.
+///
+/// This module provides structures and functions for parsing and working with key mapping tables
+/// found in CASC storages. These tables are used to locate and access file data by encoding key.
 use base64::prelude::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
@@ -5,29 +9,49 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
+/// Represents a CASC key mapping table, which maps encoding keys to file offsets and sizes.
+///
+/// This struct is used to parse and store the metadata for a key mapping table in a CASC storage.
+/// The table allows efficient lookup of file data by encoding key.
 #[derive(Debug)]
 pub struct CascKeyMappingTable {
+    /// The version of the key mapping table format.
     version: u16,
+    /// The bucket index used for hashing.
     bucket_index: u8,
+    /// An extra byte used for format-specific purposes.
     extra_byte: u8,
+    /// The length in bytes of the encoded size field.
     encoded_size_length: u8,
+    /// The length in bytes of the storage offset field.
     storage_offset_length: u8,
+    /// The length in bytes of the encoding key.
     encoding_key_length: u8,
+    /// The number of bits used for the file offset.
     file_offset_bits: u8,
+    /// The mask applied to the file offset.
     file_offset_mask: u64,
+    /// The total file size represented by this table.
     file_size: u64,
 }
 
 #[derive(Debug)]
+/// Represents a single entry in a CASC key mapping table.
+///
+/// Each entry maps an encoding key to a file offset, size, and archive index.
 pub struct CascKeyMappingTableEntry {
+    /// The encoding key for the file data.
     pub encoding_key: Vec<u8>,
+    /// The offset of the file data within the archive.
     pub offset: u64,
+    /// The size of the file data.
     pub size: u32,
+    /// The index of the archive containing the file data.
     pub archive_index: u32,
 }
 
 impl CascKeyMappingTable {
-    pub fn new(
+    pub(crate) fn new(
         file_name: &PathBuf,
         entries: &mut HashMap<String, CascKeyMappingTableEntry>,
     ) -> io::Result<Self> {

@@ -27,14 +27,12 @@ pub struct CascFileStream {
 impl CascFileStream {
     /// Creates a new `CascFileStream` from the given spans and size.
     pub(crate) fn new(spans: Vec<CascFileSpan<File>>, size: u64) -> Self {
-        let mut cache = None;
-
         CascFileStream {
             spans,
             internal_size: size,
             internal_position: 0,
             is_open: true,
-            cache,
+            cache: None,
             cache_start_position: 0,
             cache_end_position: 0,
         }
