@@ -2,9 +2,9 @@ use crate::{
     block_table::{block_table_entry::BlockTableEntry, block_table_header::BlockTableHeader},
     casc_build_info::CascBuildInfo,
     casc_config::CascConfig,
+    casc_file::CascFile,
     casc_file_frame::CascFileFrame,
     casc_file_info::CascFileInfo,
-    casc_file_reader::CascFileReader,
     casc_file_span::CascFileSpan,
     casc_key_mapping_table::{CascKeyMappingTable, CascKeyMappingTableEntry},
     casc_span_header::CascSpanHeader,
@@ -14,12 +14,11 @@ use crate::{
 };
 use base64::prelude::*;
 use glob::glob;
-use std::collections::HashMap;
 use std::fs;
-use std::fs::File;
 use std::io;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::{collections::HashMap, fs::File};
 
 #[derive(Debug)]
 pub struct CascStorage {
@@ -241,7 +240,7 @@ impl CascStorage {
         Ok(files)
     }
 
-    pub fn open_file(&self, entry: &str) -> Result<CascFileReader, CascError> {
+    pub fn open_file(&self, entry: &str) -> Result<CascFile, CascError> {
         let entry = self
             .root_handler
             .file_entries
@@ -306,13 +305,13 @@ impl CascStorage {
                 spans.push(new_span);
             };
         }
-        Ok(CascFileReader::new(spans, virtual_offset))
+        Ok(CascFile::new(spans, virtual_offset))
     }
 
     pub(crate) fn open_file_from_entry(
         entry: &CascKeyMappingTableEntry,
         data_files: &[File],
-    ) -> Result<CascFileReader, CascError> {
+    ) -> Result<CascFile, CascError> {
         let mut virtual_offset = 0u64;
         let mut spans: Vec<CascFileSpan<File>> = Vec::new();
 
@@ -368,6 +367,6 @@ impl CascStorage {
         );
         spans.push(new_span);
 
-        Ok(CascFileReader::new(spans, virtual_offset))
+        Ok(CascFile::new(spans, virtual_offset))
     }
 }

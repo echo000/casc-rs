@@ -1,15 +1,16 @@
 use crate::block_table::block_table_encoder_type::BlockTableEncoderType;
 use crate::casc_file_span::CascFileSpan;
 use flate2::read::ZlibDecoder;
-use std::fs::File;
-use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom};
+use std::{
+    fs::File,
+    io::{self, Error, ErrorKind, Read, Seek, SeekFrom},
+};
 
-/// Represents a stream for reading files from a CASC storage.
-///
 /// This struct manages reading, seeking, and caching data from multiple file spans,
+
 /// handling decompression and decryption as needed.
 
-pub struct CascFileReader {
+pub struct CascFile {
     /// The spans that make up the file.
     pub spans: Vec<CascFileSpan<File>>,
     /// The total size of the file.
@@ -20,17 +21,17 @@ pub struct CascFileReader {
     is_open: bool,
     /// Optional cache for read data.
     cache: Option<Vec<u8>>,
-    /// Start position of the cache.
+    /// The start position of the cache.
     cache_start_position: u64,
-    /// End position of the cache
+    /// The end position of the cache.
     cache_end_position: u64,
 }
 
-impl CascFileReader {
-    /// Creates a new `CascFileReader` from the given spans and size.
+impl CascFile {
+    /// Creates a new `File` from the given spans and size.
 
     pub(crate) fn new(spans: Vec<CascFileSpan<File>>, size: u64) -> Self {
-        CascFileReader {
+        CascFile {
             spans,
             internal_size: size,
             internal_position: 0,
@@ -47,7 +48,7 @@ impl CascFileReader {
     }
 }
 
-impl Read for CascFileReader {
+impl Read for CascFile {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self.is_open {
             return Err(Error::new(ErrorKind::Other, "Stream is closed"));
@@ -135,7 +136,7 @@ impl Read for CascFileReader {
     }
 }
 
-impl Seek for CascFileReader {
+impl Seek for CascFile {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         match pos {
             SeekFrom::Start(offset) => self.internal_position = offset,
