@@ -3,8 +3,10 @@
 //! `casc-rs` is a pure Rust implementation of a Casc Storage Handler for Blizzard's CASC format.
 //! It enables reading, listing, and extracting files from Blizzard game data archives.
 //!
+//! > **Note:** This library currently only supports CASC storages that use the TVFS root file format.
+//!
 //! ## Features
-//! - Read and parse CASC storages (WoW, Overwatch, etc.)
+//! - Read and parse CASC storages
 //! - List files and their metadata
 //! - Extract files by name
 //!
