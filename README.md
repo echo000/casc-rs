@@ -18,7 +18,7 @@ This crate allows you to read and extract files from Blizzard's CASC storage for
 
 ```toml
 [dependencies]
-casc-rs = { git = "https://github.com/echo000/casc-rs" }
+casc-rs = 0.1
 ```
 
 ### Example: Listing and Extracting Files
