@@ -1,9 +1,6 @@
 use crate::error::CascError;
 use crate::utility::dsv_file::DSVFile;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 /// Represents build information loaded from a CASC `.build.info` file.

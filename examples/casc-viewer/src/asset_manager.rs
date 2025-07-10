@@ -151,7 +151,7 @@ impl PorterAssetManager for AssetManager {
             *self.loaded_assets.write().unwrap() = Vec::new();
         }
         let file = files.first().unwrap();
-        let storage = CascStorage::new(&file.parent().unwrap(), None)
+        let storage = CascStorage::open(&file.parent().unwrap())
             .map_err(|e| format!("Failed to open Casc Storage {e}"))?;
 
         let mut entries = Vec::new();

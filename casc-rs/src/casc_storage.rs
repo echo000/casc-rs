@@ -8,15 +8,16 @@ use crate::{
     casc_file_span::CascFileSpan,
     casc_key_mapping_table::{CascKeyMappingTable, CascKeyMappingTableEntry},
     casc_span_header::CascSpanHeader,
+    entry::Entry,
     error::CascError,
     ext::io_ext::{ArrayReadExt, StructReadExt},
-    tvfs_root_handler::TVFSRootHandler,
+    root_handler::{RootHandler, RootHandlerTrait},
+    root_handlers::tvfs_root_handler::TVFSRootHandler,
 };
 use base64::prelude::*;
 use glob::glob;
 use std::fs;
-use std::io;
-use std::io::{ErrorKind, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
 
@@ -24,7 +25,7 @@ use std::{collections::HashMap, fs::File};
 pub struct CascStorage {
     entries: HashMap<String, CascKeyMappingTableEntry>,
     key_mapping_tables: Vec<CascKeyMappingTable>,
-    root_handler: TVFSRootHandler,
+    root_handler: RootHandler,
     build_info: CascBuildInfo,
     config: CascConfig,
     storage_path: String,
@@ -34,10 +35,7 @@ pub struct CascStorage {
 }
 
 impl CascStorage {
-    pub fn open<P: AsRef<Path>>(
-        folder: P,
-        handler: Option<TVFSRootHandler>,
-    ) -> Result<Self, CascError> {
+    pub fn open<P: AsRef<Path>>(folder: P) -> Result<Self, CascError> {
         let f = folder.as_ref();
         let data_path = f.join("Data").join("data");
 
@@ -64,7 +62,7 @@ impl CascStorage {
         }
 
         let data_files = Self::load_data_files(&data_path)?;
-        let root_handler = Self::load_root_handler(&config, handler, &data_files, &entries)?;
+        let root_handler = Self::load_root_handler(&config, &data_files, &entries)?;
 
         let files = Self::load_files(&root_handler, &entries)?;
 
@@ -165,18 +163,14 @@ impl CascStorage {
             .collect()
     }
 
+    //TODO: Determine which root handler to use from ROOT key
     fn load_root_handler(
         config: &CascConfig,
-        handler: Option<TVFSRootHandler>,
         data_files: &[File],
         entries: &HashMap<String, CascKeyMappingTableEntry>,
-    ) -> Result<TVFSRootHandler, CascError> {
-        // If handler already exists, just return it
-        if let Some(existing_handler) = handler {
-            return Ok(existing_handler);
-        }
-
+    ) -> Result<RootHandler, CascError> {
         // Get the "vfs-root" key from config
+        // This is only for virtual casc file systems
         let key = config
             .get("vfs-root")
             .ok_or_else(|| CascError::Other("vfs-root not in config".to_string()))?;
@@ -206,20 +200,31 @@ impl CascStorage {
         stream.seek(SeekFrom::Start(0))?;
 
         // Match on header
-        let root_handler = match u32::from_le_bytes(header_buf) {
-            0x53465654 => TVFSRootHandler::new(&mut stream)?,
-            _ => return Err(CascError::InvalidData("Invalid VFS header".to_string())),
+        let header_magic = u32::from_le_bytes(header_buf);
+        let root_handler = match header_magic {
+            0x53465654 => {
+                let handler = TVFSRootHandler::new(&mut stream)?;
+                RootHandler::TVFS(handler)
+            }
+            //0x58444E4D - MDNX
+            //0x8007D0C4 - Diablo3
+            //0x4D465354 - WOW
+            _ => {
+                return Err(CascError::InvalidData(format!(
+                    "Invalid VFS header {header_magic}",
+                )))
+            }
         };
 
         Ok(root_handler)
     }
 
     fn load_files(
-        handler: &TVFSRootHandler,
+        handler: &RootHandler,
         entries: &HashMap<String, CascKeyMappingTableEntry>,
     ) -> Result<Vec<CascFileInfo>, CascError> {
         let mut files = Vec::new();
-        for (name, entry) in &handler.file_entries {
+        for (name, entry) in handler.get_file_entries()? {
             let mut info = CascFileInfo {
                 file_name: name.clone(),
                 is_local: true,
@@ -243,7 +248,7 @@ impl CascStorage {
     pub fn open_file(&self, entry: &str) -> Result<CascFile, CascError> {
         let entry = self
             .root_handler
-            .file_entries
+            .get_file_entries()?
             .get(entry)
             .ok_or_else(|| CascError::FileNotFound(format!("Entry not found: {entry}")))?;
         let mut virtual_offset = 0u64;

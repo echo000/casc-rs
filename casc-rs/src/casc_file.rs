@@ -7,9 +7,7 @@ use std::{
 };
 
 /// This struct manages reading, seeking, and caching data from multiple file spans,
-
 /// handling decompression and decryption as needed.
-
 pub struct CascFile {
     /// The spans that make up the file.
     pub spans: Vec<CascFileSpan<File>>,

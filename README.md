@@ -30,7 +30,7 @@ use std::io::Write;
 
 fn main() {
     // Open a CASC storage directory (containing .build.info, config, Data/)
-    let storage = CascStorage::open("path/to/casc/storage", None).unwrap();
+    let storage = CascStorage::open("path/to/casc/storage").unwrap();
 
     // List all files
     for file_info in &storage.files {

@@ -7,7 +7,7 @@ use base64::prelude::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 /// Represents a CASC key mapping table, which maps encoding keys to file offsets and sizes.

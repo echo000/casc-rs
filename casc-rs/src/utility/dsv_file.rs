@@ -1,5 +1,6 @@
+use crate::error::CascError;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 
 /// A struct to hold a Delimiter Separated Value File (DSV)
@@ -37,7 +38,7 @@ impl DSVFile {
         file: P,
         delimiter: &str,
         comment: Option<&str>,
-    ) -> io::Result<Self> {
+    ) -> Result<Self, CascError> {
         let file = File::open(file)?;
         let mut dsv = Self {
             delimiter: delimiter.to_string(),
@@ -49,7 +50,7 @@ impl DSVFile {
     }
 
     /// Loads DSV data from a reader (e.g., File, BufReader, etc.)
-    pub(crate) fn load<R: Read>(&mut self, reader: R) -> io::Result<()> {
+    pub(crate) fn load<R: Read>(&mut self, reader: R) -> Result<(), CascError> {
         let buffered = BufReader::new(reader);
         let supports_commenting = self.comment.as_deref().map_or(false, |c| !c.is_empty());
 

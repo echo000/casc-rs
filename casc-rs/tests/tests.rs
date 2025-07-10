@@ -5,7 +5,19 @@ use casc_rs::casc_storage::CascStorage;
 #[test]
 fn test_load_file_name() {
     println!("Test started");
-    let storage = CascStorage::open(STORAGE, None);
+    let storage = CascStorage::open(STORAGE);
+    assert!(storage.is_ok());
+    println!("Storage loaded successfully");
+    let unwrapped_storage = storage.unwrap();
+    let file = unwrapped_storage.open_file(TEST_FILE);
+    println!("File opened successfully");
+    assert!(file.is_ok());
+}
+
+#[test]
+fn test_export_file() {
+    println!("Test started");
+    let storage = CascStorage::open(STORAGE);
     assert!(storage.is_ok());
     println!("Storage loaded successfully");
     let unwrapped_storage = storage.unwrap();
