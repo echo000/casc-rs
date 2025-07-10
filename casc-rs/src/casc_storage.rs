@@ -42,7 +42,7 @@ use std::{collections::HashMap, fs::File};
 ///
 /// // List all files
 /// for file_info in &storage.files {
-///     println!("File: {} ({} bytes)", file_info.file_name, file_info.file_size);
+///     println!("File: {} ({} bytes)", file_info.file_name(), file_info.file_size());
 /// }
 ///
 /// // Extract a file by name
@@ -267,17 +267,14 @@ impl CascStorage {
     ) -> Result<Vec<CascFileInfo>, CascError> {
         let mut files = Vec::new();
         for (name, entry) in handler.get_file_entries()? {
-            let mut info = CascFileInfo {
-                file_name: name.clone(),
-                is_local: true,
-                file_size: 0,
-            };
+            let mut info = CascFileInfo::new(name.clone(), 0, true);
+
             for span_info in &entry.spans {
                 match entries.get(&span_info.base64_encoding_key) {
-                    Some(entry1) => info.file_size += entry1.size as i64,
+                    Some(entry1) => info.set_file_size(info.file_size() + entry1.size as i64),
                     None => {
-                        info.is_local = false;
-                        info.file_size = 0;
+                        info.set_is_local(false);
+                        info.set_file_size(0);
                         break;
                     }
                 }

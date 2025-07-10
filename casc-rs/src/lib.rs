@@ -18,6 +18,9 @@
 //! ## File
 //! The [`CascFile`](casc_file::CascFile) struct provides stream-like, read and seek access to the contents of files stored in a CASC archive. It is returned by methods such as `CascStorage::open_file_name` and implements the standard `Read` and `Seek` traits, allowing you to process file data just like with `std::fs::File`. This makes it easy to extract, process, or copy file contents from the archive in an idiomatic Rust way.
 //!
+//! ## CascFileInfo
+//! The [`CascFileInfo`](casc_file_info::CascFileInfo) struct represents metadata about files in the storage.
+//!
 //! ## Error Handling
 //! All fallible operations in this crate return a [`CascError`](error::CascError) type, which provides detailed information about possible errors such as file not found, invalid data, unsupported file types, I/O errors, and more. You can use standard Rust error handling patterns (`?`, `match`, etc.) to work with these errors.
 //!
@@ -53,7 +56,7 @@ mod casc_build_info;
 mod casc_config;
 pub mod casc_file;
 mod casc_file_frame;
-mod casc_file_info;
+pub mod casc_file_info;
 mod casc_file_span;
 mod casc_key_mapping_table;
 mod casc_span_header;
