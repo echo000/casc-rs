@@ -1,4 +1,4 @@
-use casc_rs::{casc_file_stream::CascFileStream, casc_storage::CascStorage};
+use casc_rs::{casc_storage::CascStorage, error::CascError};
 use porter_ui::{
     Color, PorterAssetManager, PorterAssetStatus, PorterColorPalette, PorterSearch,
     PorterSearchAsset,
@@ -6,7 +6,6 @@ use porter_ui::{
 use porter_utils::{AsHumanBytes, AtomicCancel, AtomicProgress};
 use rayon::prelude::*;
 use std::{
-    io,
     path::Path,
     sync::{Arc, RwLock},
 };
@@ -28,7 +27,7 @@ impl Asset {
         self.name.clone()
     }
     pub fn info(&self) -> String {
-        format!("{}", self.asset_size.as_human_bytes())
+        self.asset_size.as_human_bytes().to_string()
     }
     pub fn type_name(&self) -> String {
         self.asset_type.clone()
@@ -151,7 +150,7 @@ impl PorterAssetManager for AssetManager {
             *self.loaded_assets.write().unwrap() = Vec::new();
         }
         let file = files.first().unwrap();
-        let storage = CascStorage::open(&file.parent().unwrap())
+        let storage = CascStorage::open(file.parent().unwrap())
             .map_err(|e| format!("Failed to open Casc Storage {e}"))?;
 
         let mut entries = Vec::new();
@@ -214,7 +213,7 @@ impl PorterAssetManager for AssetManager {
             let asset = &all_assets[asset_index];
             asset.status().set(PorterAssetStatus::exporting());
 
-            if asset.asset_size <= 0 {
+            if asset.asset_size == 0 {
                 self.export_progress.increment();
                 asset.status().set(PorterAssetStatus::error());
                 return;
@@ -225,32 +224,30 @@ impl PorterAssetManager for AssetManager {
                 // Handle None case
                 return;
             };
-            let export_result = storage_ref
-                .open_file_name(&asset.name)
-                .and_then(|mut file| {
-                    let output_file_path = output_path.join(&asset.name);
-                    if let Some(parent) = output_file_path.parent() {
-                        if let Err(e) = std::fs::create_dir_all(parent) {
-                            return Err(io::Error::other(format!(
-                                "Failed to create output directory: {e}"
-                            )));
-                        }
+            let export_result = storage_ref.open_file(&asset.name).and_then(|mut file| {
+                let output_file_path = output_path.join(&asset.name);
+                if let Some(parent) = output_file_path.parent() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        return Err(CascError::Other(format!(
+                            "Failed to create output directory: {e}"
+                        )));
                     }
-                    let mut output_file = match std::fs::File::create(&output_file_path) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            return Err(io::Error::other(format!(
-                                "Failed to create output file: {e}"
-                            )));
-                        }
-                    };
-                    if let Err(e) = std::io::copy(&mut file, &mut output_file) {
-                        return Err(io::Error::other(format!("Failed to copy data: {e}")));
+                }
+                let mut output_file = match std::fs::File::create(&output_file_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        return Err(CascError::Other(format!(
+                            "Failed to create output file: {e}"
+                        )));
                     }
-                    asset.status().set(PorterAssetStatus::exported());
-                    self.export_progress.increment();
-                    Ok(())
-                });
+                };
+                if let Err(e) = std::io::copy(&mut file, &mut output_file) {
+                    return Err(CascError::Other(format!("Failed to copy data: {e}")));
+                }
+                asset.status().set(PorterAssetStatus::exported());
+                self.export_progress.increment();
+                Ok(())
+            });
 
             if let Err(e) = export_result {
                 asset.status().set(PorterAssetStatus::error());
@@ -268,7 +265,6 @@ impl PorterAssetManager for AssetManager {
         _request_id: u64,
         _ui: porter_ui::PorterUI,
     ) {
-        return;
     }
 
     /// Cancels an active export.
