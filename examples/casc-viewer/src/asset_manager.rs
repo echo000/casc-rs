@@ -155,10 +155,10 @@ impl PorterAssetManager for AssetManager {
 
         let mut entries = Vec::new();
         for entry in &storage.files {
-            if !entry.is_local {
+            if !entry.is_local() {
                 continue;
             }
-            let name = entry.file_name.clone();
+            let name = entry.file_name();
             let ext = match Path::new(&name)
                 .extension()
                 .and_then(|ext| ext.to_str())
@@ -171,7 +171,7 @@ impl PorterAssetManager for AssetManager {
                 name: name.to_string(),
                 asset_type: ext.to_string(),
                 status: PorterAssetStatus::loaded(),
-                asset_size: entry.file_size as u64,
+                asset_size: entry.file_size() as u64,
             };
             entries.push(asset);
         }
