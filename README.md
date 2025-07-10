@@ -1,5 +1,10 @@
 # casc-rs
 
+[![Crates.io](https://img.shields.io/crates/v/casc-rs.svg)](https://crates.io/crates/casc-rs)
+[![Docs.rs](https://docs.rs/casc-rs/badge.svg)](https://docs.rs/casc-rs)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+
 A pure Rust implementation of a Casc Storage Handler, inspired by the version ported to C# from C++.
 This crate allows you to read and extract files from Blizzard's CASC storage format.
 
