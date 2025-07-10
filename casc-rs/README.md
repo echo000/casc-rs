@@ -5,13 +5,6 @@ This crate allows you to read and extract files from Blizzard's CASC storage for
 
 > **Note:** This library currently only supports CASC storages that use the TVFS root file format.
 
-## Crates
-
-- **casc-rs**: The core library for reading CASC storages.
-    - Note: Types such as `CascFileInfo` expose all fields via getters only; fields are private and setters are restricted to crate-only visibility.
-
----
-
 ## Usage
 
 ### Add to your `Cargo.toml`

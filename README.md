@@ -13,7 +13,6 @@ This crate allows you to read and extract files from Blizzard's CASC storage for
 ## Crates
 
 - **casc-rs**: The core library for reading CASC storages.
-    - Note: Types such as `CascFileInfo` expose all fields via getters only; fields are private and setters are restricted to crate-only visibility.
 - **casc-viewer**: A GUI application for browsing and exporting files from CASC storages, built with [porter-lib](https://github.com/dtzxporter/porter-lib).
 
 ---
