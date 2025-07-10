@@ -110,7 +110,7 @@ impl CascStorage {
         build_info: &CascBuildInfo,
         storage_path: &str,
     ) -> Result<CascConfig, CascError> {
-        fn find_config<P: AsRef<Path>>(dir: P, build_key: &str) -> Option<std::path::PathBuf> {
+        fn find_config<P: AsRef<Path>>(dir: P, build_key: &str) -> Option<PathBuf> {
             for entry in fs::read_dir(dir).ok()? {
                 let entry = entry.ok()?;
                 let path = entry.path();
