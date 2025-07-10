@@ -3,7 +3,7 @@ const TEST_FILE: &str = "pak_base_vol021.xpak";
 use casc_rs::casc_storage::CascStorage;
 
 #[test]
-fn test_load_file_name() {
+fn tvfs_load_file_name() {
     println!("Test started");
     let storage = CascStorage::open(STORAGE);
     assert!(storage.is_ok());
@@ -15,7 +15,7 @@ fn test_load_file_name() {
 }
 
 #[test]
-fn test_export_file() {
+fn tvfs_export_file() {
     println!("Test started");
     let storage = CascStorage::open(STORAGE);
     assert!(storage.is_ok());
