@@ -264,9 +264,10 @@ impl CascStorage {
                 let header = reader.read_struct::<BlockTableHeader>()?;
 
                 if header.signature != 0x45544C42 {
-                    return Err(CascError::InvalidData(
-                        "Invalid Block Table Header signature".to_string(),
-                    )
+                    return Err(CascError::InvalidData(format!(
+                        "Invalid Block Table Header signature: {:#X}",
+                        header.signature
+                    ))
                     .into());
                 }
 
