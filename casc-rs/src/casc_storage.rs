@@ -21,16 +21,60 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::{collections::HashMap, fs::File};
 
+/// Represents an open CASC storage directory, providing access to files and metadata.
+///
+/// `CascStorage` is the main entry point for interacting with Blizzard's CASC archives.
+/// It handles loading and parsing the storage's metadata, configuration, file tables,
+/// and provides methods to list and extract files from the archive.
+///
+/// # Usage
+///
+/// Typically, you create a `CascStorage` instance by calling [`CascStorage::open`] with the
+/// path to a CASC storage directory (containing `.build.info`, and `Data/`).
+/// Once opened, you can list available files via the `files` field, and extract file
+/// contents using [`CascStorage::open_file`].
+///
+/// ```rust
+/// use casc_rs::casc_storage::CascStorage;
+///
+/// // Open a CASC storage directory
+/// let storage = CascStorage::open("path/to/casc/storage").unwrap();
+///
+/// // List all files
+/// for file_info in &storage.files {
+///     println!("File: {} ({} bytes)", file_info.file_name, file_info.file_size);
+/// }
+///
+/// // Extract a file by name
+/// let mut casc_reader = storage.open_file("some/file/in/storage.txt").unwrap();
+/// // ... read from casc_reader as needed ...
+/// ```
+///
+/// # Fields
+/// - `files`: List of discovered files in the storage, with metadata.
+/// - Other fields are internal and subject to change.
+///
+/// # Note
+/// This implementation currently only supports CASC storages that use the TVFS root file format.
 #[derive(Debug)]
 pub struct CascStorage {
+    /// Internal mapping of file names to key mapping table entries.
     entries: HashMap<String, CascKeyMappingTableEntry>,
+    /// All loaded key mapping tables from the storage.
     key_mapping_tables: Vec<CascKeyMappingTable>,
+    /// Handler for the root file system (currently only TVFS supported).
     root_handler: RootHandler,
+    /// Parsed build information from `.build.info`.
     build_info: CascBuildInfo,
+    /// Parsed configuration information from the storage.
     config: CascConfig,
+    /// Path to the root of the storage directory.
     storage_path: String,
+    /// Path to the storage's data directory.
     data_path: String,
+    /// Open file handles to the storage's data files.
     data_files: Vec<File>,
+    /// List of files discovered in the storage, with metadata.
     pub files: Vec<CascFileInfo>,
 }
 
