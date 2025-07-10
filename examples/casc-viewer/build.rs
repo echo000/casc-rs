@@ -17,13 +17,6 @@ fn main() {
     )
     .expect("unable to embed manifest file");
 
-    // Resource
-    winresource::WindowsResource::new()
-        /*.set_icon("res/Saluki.ico")*/
-        .set_language(0x0409)
-        .compile()
-        .expect("unable to compile Windows resource");
-
     // Add the link search path
     println!("cargo:rustc-link-search=native=lib");
 

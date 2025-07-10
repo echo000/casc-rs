@@ -175,10 +175,8 @@ impl CascStorage {
             .get("vfs-root")
             .ok_or_else(|| CascError::Other("vfs-root not in config".to_string()))?;
 
-        let hex_bytes = hex::decode(&key.values[1]) // assuming config.get returns a struct with .values[1]
-            .map_err(|_| {
-                CascError::InvalidData("Invalid hex in vfs-root".to_string())
-            })?;
+        let hex_bytes = hex::decode(&key.values[1])
+            .map_err(|_| CascError::InvalidData("Invalid hex in vfs-root".to_string()))?;
 
         let base64 = BASE64_STANDARD.encode(&hex_bytes);
         let base64_key = &base64[0..12];
