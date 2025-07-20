@@ -52,7 +52,7 @@ impl DSVFile {
     /// Loads DSV data from a reader (e.g., File, BufReader, etc.)
     pub(crate) fn load<R: Read>(&mut self, reader: R) -> Result<(), CascError> {
         let buffered = BufReader::new(reader);
-        let supports_commenting = self.comment.as_deref().map_or(false, |c| !c.is_empty());
+        let supports_commenting = self.comment.as_deref().is_some_and(|c| !c.is_empty());
 
         for line in buffered.lines() {
             let line = line?;

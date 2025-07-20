@@ -4,7 +4,6 @@ use crate::span_info::SpanInfo;
 ///
 /// This module defines the `Entry` struct, which represents a file entry in the CASC storage,
 /// including its name and associated spans.
-
 /// Represents a file entry in the CASC storage.
 ///
 /// Each `Entry` contains the file's name and a list of spans describing the file's data segments.

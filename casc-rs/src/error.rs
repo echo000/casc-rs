@@ -22,12 +22,12 @@ pub enum CascError {
 impl std::fmt::Display for CascError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CascError::InvalidData(err) => write!(f, "Invalid data: {}", err),
-            CascError::FileNotFound(name) => write!(f, "File not found: {}", name),
-            CascError::FileCorrupted(name) => write!(f, "File is corrupted: {}", name),
-            CascError::UnsupportedFileType(name) => write!(f, "Unsupported file type: {}", name),
-            CascError::Io(err) => write!(f, "I/O error: {}", err),
-            CascError::Other(err) => write!(f, "CASC error: {}", err),
+            CascError::InvalidData(err) => write!(f, "Invalid data: {err}"),
+            CascError::FileNotFound(name) => write!(f, "File not found: {name}"),
+            CascError::FileCorrupted(name) => write!(f, "File is corrupted: {name}"),
+            CascError::UnsupportedFileType(name) => write!(f, "Unsupported file type: {name}"),
+            CascError::Io(err) => write!(f, "I/O error: {err}"),
+            CascError::Other(err) => write!(f, "CASC error: {err}"),
         }
     }
 }

@@ -181,7 +181,7 @@ impl CascStorage {
         }
     }
     fn load_data_files(data_path: &str) -> Result<Vec<File>, CascError> {
-        let pattern = format!("{}/data.*", data_path);
+        let pattern = format!("{data_path}/data.*");
         let mut indexed_files: Vec<(usize, PathBuf)> = Vec::new();
 
         for entry in glob(&pattern).expect("Failed to read glob pattern") {
@@ -246,7 +246,7 @@ impl CascStorage {
         let root_handler = match header_magic {
             0x53465654 => {
                 let handler = TVFSRootHandler::new(&mut stream)?;
-                RootHandler::TVFS(handler)
+                RootHandler::Tvfs(handler)
             }
             //0x58444E4D - MDNX
             //0x8007D0C4 - Diablo3
@@ -306,8 +306,7 @@ impl CascStorage {
                     return Err(CascError::InvalidData(format!(
                         "Invalid Block Table Header signature: {:#X}",
                         header.signature
-                    ))
-                    .into());
+                    )));
                 }
 
                 // Bitshift the i24BE to u32 LE

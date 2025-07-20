@@ -1,7 +1,6 @@
 /// This module defines the `CascSpanHeader` struct, which represents the header for a span of data
 /// in a CASC archive. The header contains metadata such as encoding key, content size, flags,
 /// hash, and checksum.
-
 #[repr(C, packed)]
 #[derive(Debug, Default, Clone, Copy)]
 /// Represents the header for a span of data in a CASC archive.

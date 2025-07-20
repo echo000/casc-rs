@@ -182,7 +182,7 @@ impl TVFSRootHandler {
             // Read 1 byte
             reader.read_u8().map(|v| v as u32)
         };
-        data.map_err(|e| CascError::Io(e))
+        data.map_err(CascError::Io)
     }
 
     fn parse(&mut self, end: u64, mut builder: String) -> Result<(), CascError> {

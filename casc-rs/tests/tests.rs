@@ -32,5 +32,5 @@ fn tvfs_export_file() {
     let mut casc_stream = file.unwrap();
     let mut output = StdFile::create("xyz.dat").expect("Failed to create xyz.dat");
     let bytes_copied = copy(&mut casc_stream, &mut output).expect("Failed to write file");
-    println!("Wrote {} bytes to xyz.dat", bytes_copied);
+    println!("Wrote {bytes_copied} bytes to xyz.dat");
 }

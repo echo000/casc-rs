@@ -27,7 +27,6 @@ pub struct CascFile {
 
 impl CascFile {
     /// Creates a new `File` from the given spans and size.
-
     pub(crate) fn new(spans: Vec<CascFileSpan<File>>, size: u64) -> Self {
         CascFile {
             spans,
@@ -49,7 +48,7 @@ impl CascFile {
 impl Read for CascFile {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self.is_open {
-            return Err(Error::new(ErrorKind::Other, "Stream is closed"));
+            return Err(Error::other("Stream is closed"));
         }
         let mut read_start_pos = self.internal_position;
         if read_start_pos >= self.internal_size {
@@ -62,22 +61,21 @@ impl Read for CascFile {
         while to_read > 0 {
             let cache_available = self.cache_end_position.saturating_sub(read_start_pos);
             if let Some(ref cache) = self.cache {
-                if cache_available > 0 {
-                    if self.cache_start_position <= read_start_pos
-                        && self.cache_end_position > read_start_pos
-                    {
-                        let p = (read_start_pos - self.cache_start_position) as usize;
-                        let buf_available = buf.len().saturating_sub(offset);
-                        let n = std::cmp::min(
-                            to_read,
-                            std::cmp::min(cache_available as usize, buf_available),
-                        );
-                        buf[offset..offset + n].copy_from_slice(&cache[p..p + n]);
-                        to_read -= n;
-                        self.seek(SeekFrom::Current(n as i64))?;
-                        offset += n;
-                        consumed += n;
-                    }
+                if cache_available > 0
+                    && (self.cache_start_position <= read_start_pos
+                        && self.cache_end_position > read_start_pos)
+                {
+                    let p = (read_start_pos - self.cache_start_position) as usize;
+                    let buf_available = buf.len().saturating_sub(offset);
+                    let n = std::cmp::min(
+                        to_read,
+                        std::cmp::min(cache_available as usize, buf_available),
+                    );
+                    buf[offset..offset + n].copy_from_slice(&cache[p..p + n]);
+                    to_read -= n;
+                    self.seek(SeekFrom::Current(n as i64))?;
+                    offset += n;
+                    consumed += n;
                 }
             }
 
@@ -127,7 +125,7 @@ impl Read for CascFile {
                     decoder.read_to_end(&mut cache)?;
                     cache
                 }
-                _ => return Err(Error::new(ErrorKind::Other, "Unsupported Block Table Type")),
+                _ => return Err(Error::other("Unsupported Block Table Type")),
             });
         }
         Ok(consumed)
