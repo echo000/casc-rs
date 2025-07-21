@@ -1,3 +1,13 @@
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use base64::{engine::general_purpose, prelude::*};
+use glob::glob;
+use hex;
+
 use crate::{
     block_table::{block_table_entry::BlockTableEntry, block_table_header::BlockTableHeader},
     casc_build_info::CascBuildInfo,
@@ -14,20 +24,9 @@ use crate::{
     root_handler::{RootHandler, RootHandlerTrait},
     root_handlers::tvfs_root_handler::TVFSRootHandler,
 };
-use base64::prelude::*;
-use glob::glob;
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::{Read, Seek, SeekFrom},
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
 
 // Type aliases for complex types
-type SharedFiles = Arc<Mutex<Vec<File>>>;
 type FilePaths = Vec<PathBuf>;
-type DataFilesResult = Result<(SharedFiles, FilePaths), CascError>;
 
 /// Represents an open CASC storage directory, providing access to files and metadata.
 ///
@@ -60,10 +59,10 @@ type DataFilesResult = Result<(SharedFiles, FilePaths), CascError>;
 ///
 /// # Thread Safety
 ///
-/// `CascStorage` is internally synchronized and can be safely shared between threads.
-/// All access to the underlying data files is protected by a mutex, so you can use
-/// a single `CascStorage` instance from multiple threads without additional synchronization.
-///
+/// `CascStorage` is designed for concurrent access. It can be safely shared across
+/// threads (e.g., via an `Arc`). File access is synchronized on a per-file basis,
+/// allowing multiple threads to read from different data files in parallel, while
+/// ensuring that access to any single data file is serialized.
 /// # Fields
 /// - `files`: List of discovered files in the storage, with metadata.
 /// - Other fields are internal and subject to change.
@@ -86,8 +85,6 @@ pub struct CascStorage {
     storage_path: String,
     /// Path to the storage's data directory.
     data_path: String,
-    /// Open file handles to the storage's data files (thread safe).
-    data_files: SharedFiles,
     /// Paths to the storage's data files (for independent opening).
     data_file_paths: FilePaths,
     /// List of files discovered in the storage, with metadata.
@@ -99,12 +96,11 @@ impl CascStorage {
         let f = folder.as_ref();
         let data_path = f.join("Data").join("data");
 
-        let data_path = data_path.display().to_string();
+        let data_path_str = data_path.display().to_string();
         let storage_path = f.display().to_string();
         let build_info = Self::load_build_info(&storage_path)?;
         let config = Self::load_config_info(&build_info, &storage_path)?;
 
-        // Load idx files for key mapping tables
         let idx_files = fs::read_dir(&data_path)?
             .filter_map(|e| e.ok())
             .filter(|e| {
@@ -122,9 +118,8 @@ impl CascStorage {
             key_mapping_tables.push(key_table);
         }
         // Load data files with thread safety
-        let (data_files, data_file_paths) = Self::load_data_files(&data_path)?;
-        let root_handler =
-            Self::load_root_handler(&config, &data_files, &data_file_paths, &entries)?;
+        let data_file_paths = Self::load_data_files(&data_path_str)?;
+        let root_handler = Self::load_root_handler(&config, &data_file_paths, &entries)?;
         let files = Self::load_files(&root_handler, &entries)?;
 
         Ok(CascStorage {
@@ -134,8 +129,7 @@ impl CascStorage {
             build_info,
             config,
             storage_path,
-            data_path,
-            data_files,
+            data_path: data_path_str,
             data_file_paths,
             files,
         })
@@ -198,7 +192,8 @@ impl CascStorage {
             ))
         }
     }
-    fn load_data_files(data_path: &str) -> DataFilesResult {
+
+    fn load_data_files(data_path: &str) -> Result<FilePaths, CascError> {
         let pattern = format!("{data_path}/data.*");
         let mut indexed_files: Vec<(usize, PathBuf)> = Vec::new();
 
@@ -212,19 +207,11 @@ impl CascStorage {
         }
 
         let max_index = indexed_files.iter().map(|(i, _)| *i).max().unwrap_or(0);
-        let mut data_files: Vec<Option<File>> = (0..=max_index).map(|_| None).collect();
         let mut data_file_paths: Vec<Option<PathBuf>> = (0..=max_index).map(|_| None).collect();
 
         for (index, path) in indexed_files {
-            let file = File::open(&path)?;
-            data_files[index] = Some(file);
             data_file_paths[index] = Some(path);
         }
-
-        let files: Vec<File> = data_files
-            .into_iter()
-            .map(|opt| opt.ok_or_else(|| CascError::FileNotFound("Missing data file".to_string())))
-            .collect::<Result<Vec<_>, _>>()?;
 
         let paths: Vec<PathBuf> = data_file_paths
             .into_iter()
@@ -233,14 +220,13 @@ impl CascStorage {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok((Arc::new(Mutex::new(files)), paths))
+        Ok(paths)
     }
 
     //TODO: Determine which root handler to use from ROOT key
     fn load_root_handler(
         config: &CascConfig,
-        data_files: &SharedFiles,
-        data_file_paths: &FilePaths,
+        data_file_paths: &[PathBuf],
         entries: &HashMap<String, CascKeyMappingTableEntry>,
     ) -> Result<RootHandler, CascError> {
         // Get the "vfs-root" key from config
@@ -252,7 +238,7 @@ impl CascStorage {
         let hex_bytes = hex::decode(&key.values[1])
             .map_err(|_| CascError::InvalidData("Invalid hex in vfs-root".to_string()))?;
 
-        let base64 = BASE64_STANDARD.encode(&hex_bytes);
+        let base64 = general_purpose::STANDARD.encode(&hex_bytes);
         let base64_key = &base64[0..12];
 
         // Look up entry by transformed key
@@ -332,8 +318,8 @@ impl CascStorage {
 
         for span in &entry.spans {
             if let Some(e) = self.entries.get(&span.base64_encoding_key) {
-                let reader = std::fs::File::open(&self.data_file_paths[e.archive_index as usize])?;
-                let mut reader = reader;
+                let path = &self.data_file_paths[e.archive_index as usize];
+                let mut reader = File::open(path)?;
                 reader.seek(SeekFrom::Start(e.offset))?;
 
                 // Read and discard the span header
@@ -355,9 +341,8 @@ impl CascStorage {
                     reader.read_array::<BlockTableEntry>(frame_count as usize)?;
                 let mut archive_offset = reader.stream_position()?;
 
-                let mut span_archive_offset = archive_offset;
-                let mut span_virtual_start_offset = virtual_offset;
-                let mut span_virtual_end_offset = virtual_offset;
+                let span_archive_offset = archive_offset;
+                let span_virtual_start_offset = virtual_offset;
                 let mut frames = Vec::new();
 
                 for block_table_frame in block_table_frames {
@@ -371,13 +356,12 @@ impl CascStorage {
                         virtual_start_offset: virtual_offset,
                         virtual_end_offset: virtual_offset + content_size as u64,
                     };
-                    span_virtual_end_offset += frame.content_size as u64;
                     archive_offset += encoded_size as u64;
                     virtual_offset += content_size as u64;
                     frames.push(frame);
                 }
 
-                let mut new_span = CascFileSpan::<File>::new(
+                let new_span = CascFileSpan::<File>::new(
                     reader,
                     span_virtual_start_offset,
                     virtual_offset,
@@ -398,8 +382,7 @@ impl CascStorage {
         let mut spans: Vec<CascFileSpan<File>> = Vec::new();
 
         // Open a new file handle for independent reading
-        let reader = std::fs::File::open(&data_file_paths[entry.archive_index as usize])?;
-        let mut reader = reader;
+        let mut reader = File::open(&data_file_paths[entry.archive_index as usize])?;
         reader.seek(SeekFrom::Start(entry.offset))?;
 
         // Read and discard the span header
@@ -419,9 +402,8 @@ impl CascStorage {
         let block_table_frames = reader.read_array::<BlockTableEntry>(frame_count as usize)?;
         let mut archive_offset = reader.stream_position()?;
 
-        let mut span_archive_offset = archive_offset;
-        let mut span_virtual_start_offset = virtual_offset;
-        let mut span_virtual_end_offset = virtual_offset;
+        let span_archive_offset = archive_offset;
+        let span_virtual_start_offset = virtual_offset;
         let mut frames = Vec::new();
 
         for block_table_frame in block_table_frames {
@@ -435,13 +417,12 @@ impl CascStorage {
                 virtual_start_offset: virtual_offset,
                 virtual_end_offset: virtual_offset + content_size as u64,
             };
-            span_virtual_end_offset += frame.content_size as u64;
             archive_offset += encoded_size as u64;
             virtual_offset += content_size as u64;
             frames.push(frame);
         }
 
-        let mut new_span = CascFileSpan::<File>::new(
+        let new_span = CascFileSpan::<File>::new(
             reader,
             span_virtual_start_offset,
             virtual_offset,
