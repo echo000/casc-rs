@@ -1,12 +1,11 @@
+use base64::{engine::general_purpose, prelude::*};
+use glob::glob;
+use hex;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-
-use base64::{engine::general_purpose, prelude::*};
-use glob::glob;
-use hex;
 
 use crate::{
     block_table::{block_table_entry::BlockTableEntry, block_table_header::BlockTableHeader},
@@ -142,10 +141,6 @@ impl CascStorage {
                 let path = entry.path();
                 if path.is_file() && path.file_name() == Some(".build.info".as_ref()) {
                     return Some(path);
-                } else if path.is_dir() {
-                    if let Some(found) = find_build_info(&path) {
-                        return Some(found);
-                    }
                 }
             }
             None

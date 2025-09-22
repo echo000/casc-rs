@@ -1,11 +1,12 @@
 use casc_rs::{casc_storage::CascStorage, error::CascError};
-use porter_ui::{
-    Color, PorterAssetManager, PorterAssetStatus, PorterColorPalette, PorterSearch,
-    PorterSearchAsset,
+use porter_app::{
+    AssetPreview, AssetStatus, Color, Controller, SearchAsset, SearchTerm, Settings,
+    palette::ASSET_TYPE_MODEL,
 };
-use porter_utils::{AsHumanBytes, AtomicCancel, AtomicProgress};
+use porter_utils::{AsHumanBytes, AtomicCancel, AtomicProgress, AtomicSemaphore, ResultExt};
 use rayon::prelude::*;
 use std::{
+    io::Read,
     path::Path,
     sync::{Arc, RwLock},
 };
@@ -14,12 +15,12 @@ pub struct Asset {
     pub name: String,
     pub asset_type: String,
     pub asset_size: u64,
-    pub status: PorterAssetStatus,
+    pub status: AssetStatus,
 }
 
 impl Asset {
-    pub fn search(&self) -> PorterSearchAsset {
-        PorterSearchAsset::new(self.name.clone())
+    pub fn search(&self) -> SearchAsset {
+        SearchAsset::new(self.name.clone())
     }
 
     /// Returns the name of the asset
@@ -34,10 +35,10 @@ impl Asset {
     }
     /// Returns the color of the asset type
     pub fn color(&self) -> Color {
-        PorterColorPalette::asset_type_model()
+        ASSET_TYPE_MODEL
     }
 
-    pub fn status(&self) -> &PorterAssetStatus {
+    pub fn status(&self) -> &AssetStatus {
         &self.status
     }
 }
@@ -62,13 +63,19 @@ impl AssetManager {
     }
 }
 
-impl PorterAssetManager for AssetManager {
-    /// Returns the asset info in the form of the columns to render.
-    fn asset_info(&self, index: usize, _columns: usize) -> Vec<(String, Option<Color>)> {
-        let search = self.search_assets.read().unwrap();
-        let loaded_assets = self.loaded_assets.read().unwrap();
+impl porter_app::AssetManager for AssetManager {
+    /// Whether or not the asset manager supports loading game files on disk.
+    fn supports_files(&self) -> bool {
+        true
+    }
 
-        let asset_index = if let Some(search) = search.as_ref() {
+    /// Gets information about the specific asset, in the form of column data.
+    fn assets_info(&self, index: usize) -> Vec<(String, Option<Color>)> {
+        let search_lock = self.search_assets.read().unwrap();
+        let loaded_assets_lock = self.loaded_assets.read().unwrap();
+
+        // Change this when new porter_lib out
+        let asset_index = if let Some(search) = search_lock.as_ref() {
             search.get(index).copied()
         } else {
             Some(index)
@@ -78,7 +85,7 @@ impl PorterAssetManager for AssetManager {
             return vec![];
         };
 
-        match loaded_assets.get(asset_index) {
+        match loaded_assets_lock.get(asset_index) {
             Some(asset) => vec![
                 (asset.name(), None),
                 (asset.type_name().to_string(), Some(asset.color())),
@@ -89,21 +96,23 @@ impl PorterAssetManager for AssetManager {
         }
     }
 
-    /// Returns the number of assets renderable, as in search for, or loaded.
-    fn len(&self) -> usize {
-        if let Some(indexes) = &*self.search_assets.read().unwrap() {
+    /// The number of visible assets, whether they are search results, or just loaded.
+    fn assets_visible(&self) -> usize {
+        let search_lock = self.search_assets.read().unwrap();
+
+        if let Some(indexes) = search_lock.as_ref() {
             indexes.len()
         } else {
             self.loaded_assets.read().unwrap().len()
         }
     }
 
-    /// Returns the total number of assets loaded.
-    fn loaded_len(&self) -> usize {
+    /// The total number of assets loaded.
+    fn assets_total(&self) -> usize {
         self.loaded_assets.read().unwrap().len()
     }
 
-    fn search_assets(&self, search: Option<PorterSearch>) {
+    fn search(&self, search: Option<SearchTerm>) {
         let Some(search) = search else {
             *self.search_assets.write().unwrap() = None;
             return;
@@ -126,20 +135,10 @@ impl PorterAssetManager for AssetManager {
         *self.search_assets.write().unwrap() = Some(results);
     }
 
-    /// Whether load file is supported.
-    fn supports_load_files(&self) -> bool {
-        true
-    }
-
-    /// Whether load game is supported.
-    fn supports_load_game(&self) -> bool {
-        false
-    }
-
     /// Loads the files into the asset manager.
-    fn on_load_files(
+    fn load_files(
         &self,
-        _settings: porter_ui::PorterSettings,
+        _settings: Settings,
         files: Vec<std::path::PathBuf>,
     ) -> Result<(), String> {
         if files.is_empty() {
@@ -155,9 +154,11 @@ impl PorterAssetManager for AssetManager {
 
         let mut entries = Vec::new();
         for entry in &storage.files {
-            if !entry.is_local() {
-                continue;
-            }
+            let status = if !entry.is_local() {
+                AssetStatus::NOT_SUPPORTED
+            } else {
+                AssetStatus::LOADED
+            };
             let name = entry.file_name();
             let ext = match Path::new(&name)
                 .extension()
@@ -170,7 +171,7 @@ impl PorterAssetManager for AssetManager {
             let asset = Asset {
                 name: name.to_string(),
                 asset_type: ext.to_string(),
-                status: PorterAssetStatus::loaded(),
+                status,
                 asset_size: entry.file_size() as u64,
             };
             entries.push(asset);
@@ -182,93 +183,138 @@ impl PorterAssetManager for AssetManager {
         Ok(())
     }
 
-    fn on_load_game(&self, _settings: porter_ui::PorterSettings) -> Result<(), String> {
+    fn load_game(&self, _settings: Settings) -> Result<(), String> {
         Err("How did you even get here?".into())
     }
 
-    fn on_export(
-        &self,
-        settings: porter_ui::PorterSettings,
-        assets: Vec<usize>,
-        ui: porter_ui::PorterUI,
-    ) {
-        let output_path = settings.output_directory();
+    fn export(&self, settings: Settings, assets: Vec<usize>, controller: Controller) {
         self.export_progress.reset(assets.len());
         self.export_cancel.reset();
-        let (search, all_assets, storage) = {
-            let search = self.search_assets.read().unwrap().clone();
-            let assets = self.loaded_assets.read().unwrap();
-            let storage = self.storage.clone();
-            (search, assets, storage)
-        };
-        assets.into_par_iter().for_each(|row| {
-            if self.export_cancel.is_cancelled() {
-                return;
-            }
-            let asset_index = search
-                .as_ref()
-                .and_then(|s| s.get(row).copied())
-                .unwrap_or(row);
 
-            let asset = &all_assets[asset_index];
-            asset.status().set(PorterAssetStatus::exporting());
+        let semaphore = AtomicSemaphore::new();
 
-            if asset.asset_size == 0 {
-                self.export_progress.increment();
-                asset.status().set(PorterAssetStatus::error());
-                return;
-            }
-
-            let storage_guard = storage.read().unwrap();
-            let Some(storage_ref) = storage_guard.as_ref() else {
-                // Handle None case
-                return;
-            };
-            let export_result = storage_ref.open_file(&asset.name).and_then(|mut file| {
-                let output_file_path = output_path.join(&asset.name);
-                if let Some(parent) = output_file_path.parent() {
-                    if let Err(e) = std::fs::create_dir_all(parent) {
-                        return Err(CascError::Other(format!(
-                            "Failed to create output directory: {e}"
-                        )));
+        let output_path = settings.output_directory();
+        porter_threads::scope(|scope| {
+            for asset in assets {
+                let controller = controller.clone();
+                let lock = semaphore.wait();
+                let cloned_dir = output_path.clone();
+                let storage = self.storage.clone();
+                scope.spawn(move |_| {
+                    let search = self.search_assets.read().unwrap();
+                    let assets = self.loaded_assets.read().unwrap();
+                    let asset_index = search
+                        .as_ref()
+                        .and_then(|s| s.get(asset).copied())
+                        .unwrap_or(asset);
+                    let asset = &assets[asset_index];
+                    if !asset.status().is_available() || asset.asset_size == 0 {
+                        self.export_progress.increment();
+                        controller.progress_update(false, self.export_progress.progress());
+                        return drop(lock);
                     }
-                }
-                let mut output_file = match std::fs::File::create(&output_file_path) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        return Err(CascError::Other(format!(
-                            "Failed to create output file: {e}"
-                        )));
-                    }
-                };
-                if let Err(e) = std::io::copy(&mut file, &mut output_file) {
-                    return Err(CascError::Other(format!("Failed to copy data: {e}")));
-                }
-                asset.status().set(PorterAssetStatus::exported());
-                self.export_progress.increment();
-                Ok(())
-            });
+                    asset.status().set(AssetStatus::EXPORTING);
+                    let _ = std::fs::create_dir_all(&cloned_dir)
+                        .debug_fn(|e| format!("Failed to create dest dir `{cloned_dir:?}`: {e}"));
 
-            if let Err(e) = export_result {
-                asset.status().set(PorterAssetStatus::error());
-                eprintln!("Error exporting {}: {}", asset.name, e);
+                    let storage_guard = storage.read().unwrap();
+                    let Some(storage_ref) = storage_guard.as_ref() else {
+                        // Handle None case
+                        return;
+                    };
+                    let result = storage_ref.open_file(&asset.name).and_then(|mut file| {
+                        let output_file_path = cloned_dir.join(&asset.name);
+                        if let Some(parent) = output_file_path.parent() {
+                            if let Err(e) = std::fs::create_dir_all(parent) {
+                                return Err(CascError::Other(format!(
+                                    "Failed to create output directory: {e}"
+                                )));
+                            }
+                        }
+                        let mut output_file = match std::fs::File::create(&output_file_path) {
+                            Ok(f) => f,
+                            Err(e) => {
+                                return Err(CascError::Other(format!(
+                                    "Failed to create output file: {e}"
+                                )));
+                            }
+                        };
+                        if let Err(e) = std::io::copy(&mut file, &mut output_file) {
+                            return Err(CascError::Other(format!("Failed to copy data: {e}")));
+                        }
+                        Ok(())
+                    });
+                    // Check the result of the export operation
+                    match result {
+                        // If export was successful, set the status to exported
+                        Ok(_) => asset.status().set(AssetStatus::EXPORTED),
+                        // If export failed, set the status to error
+                        Err(e) => {
+                            eprintln!("Error exporting `{}`: {e}", asset.name());
+                            asset.status().set(AssetStatus::ERROR);
+                        }
+                    }
+                    self.export_progress.increment();
+                    controller.progress_update(false, self.export_progress.progress());
+                    drop(lock);
+                });
+                if self.export_cancel.is_cancelled() {
+                    return;
+                }
             }
         });
-        ui.sync(false, 100);
+        // Finalize export
+        controller.progress_update(true, 100);
     }
 
     ///Not used, but required by the trait.
-    fn on_preview(
+    fn preview(
         &self,
-        _settings: porter_ui::PorterSettings,
-        _asset: usize,
-        _request_id: u64,
-        _ui: porter_ui::PorterUI,
+        settings: Settings,
+        asset: usize,
+        raw: bool,
+        request_id: u64,
+        controller: Controller,
     ) {
+        let _ = raw;
+        let assets_guard = self.loaded_assets.read().unwrap();
+        let storage_guard = self.storage.read().unwrap();
+        let Some(storage_ref) = storage_guard.as_ref() else {
+            // Handle None case
+            return;
+        };
+
+        let (asset_name, asset_ref) = {
+            let search = self.search_assets.read().unwrap();
+            let asset_index = search
+                .as_ref()
+                .and_then(|s| s.get(asset).copied())
+                .unwrap_or(asset);
+            let selected_asset = &assets_guard[asset_index];
+            // Ignore the placeholder assets
+            if !selected_asset.status().is_available() {
+                return;
+            }
+            (selected_asset.name(), selected_asset)
+        };
+
+        let result = storage_ref.open_file(&asset_name).and_then(|mut file| {
+            let mut buf = Vec::with_capacity(asset_ref.asset_size as usize);
+            let _ = file.read_to_end(&mut buf)?;
+            Ok(buf)
+        });
+
+        let preview_asset = result
+            .map(|bytes| AssetPreview::RawFile(asset_name, bytes))
+            .ok();
+
+        if let Some(preview) = preview_asset {
+            controller.preview_update(request_id, preview);
+        }
     }
 
     /// Cancels an active export.
-    fn cancel_export(&self) {
+    fn export_cancel(&self) {
         self.export_cancel.cancel();
     }
 }

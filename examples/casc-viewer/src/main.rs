@@ -21,20 +21,18 @@
     all(target_os = "windows", not(debug_assertions),),
     windows_subsystem = "windows"
 )]
-use porter_ui::PorterColorPalette;
+use porter_app::palette::*;
 mod asset_manager;
 
 fn main() {
-    porter_ui::create_main(asset_manager::AssetManager::new())
+    porter_app::initialize(asset_manager::AssetManager::new())
         .version("0.0.1")
         .name("Casc Viewer")
         .description("Casc Library Explorer")
-        .column("Name", 350, None)
-        .column("Type", 100, None)
-        .column("Status", 150, None)
-        .column("Info", 250, Some(PorterColorPalette::asset_info()))
+        .column("Name", 350, None, None)
+        .column("Type", 100, None, None)
+        .column("Status", 150, None, None)
+        .column("Info", 250, Some(TEXT_COLOR_SECONDARY), None)
         .file_filter("Build Info (*.build.info)", vec!["build.info"])
-        .raw_files_forcable(false)
-        .preview(false)
         .run();
 }
