@@ -201,20 +201,8 @@ impl CascStorage {
             }
         }
 
-        let max_index = indexed_files.iter().map(|(i, _)| *i).max().unwrap_or(0);
-        let mut data_file_paths: Vec<Option<PathBuf>> = (0..=max_index).map(|_| None).collect();
-
-        for (index, path) in indexed_files {
-            data_file_paths[index] = Some(path);
-        }
-
-        let paths: Vec<PathBuf> = data_file_paths
-            .into_iter()
-            .map(|opt| {
-                opt.ok_or_else(|| CascError::FileNotFound("Missing data file path".to_string()))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
+        indexed_files.sort_by_key(|(index, _)| *index);
+        let paths: Vec<PathBuf> = indexed_files.into_iter().map(|(_, path)| path).collect();
         Ok(paths)
     }
 
