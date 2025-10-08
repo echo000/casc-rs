@@ -25,7 +25,7 @@ use crate::{
 };
 
 // Type aliases for complex types
-type FilePaths = Vec<PathBuf>;
+type FilePaths = HashMap<u32, PathBuf>;
 
 /// Represents an open CASC storage directory, providing access to files and metadata.
 ///
@@ -190,26 +190,24 @@ impl CascStorage {
 
     fn load_data_files(data_path: &str) -> Result<FilePaths, CascError> {
         let pattern = format!("{data_path}/data.*");
-        let mut indexed_files: Vec<(usize, PathBuf)> = Vec::new();
+        let mut indexed_files: HashMap<u32, PathBuf> = HashMap::new();
 
         for entry in glob(&pattern).expect("Failed to read glob pattern") {
             let path = entry.map_err(|e| CascError::Other(format!("{e}")))?;
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if let Ok(index) = ext.parse::<usize>() {
-                    indexed_files.push((index, path));
+                    indexed_files.insert(index as u32, path);
                 }
             }
         }
 
-        indexed_files.sort_by_key(|(index, _)| *index);
-        let paths: Vec<PathBuf> = indexed_files.into_iter().map(|(_, path)| path).collect();
-        Ok(paths)
+        Ok(indexed_files)
     }
 
     //TODO: Determine which root handler to use from ROOT key
     fn load_root_handler(
         config: &CascConfig,
-        data_file_paths: &[PathBuf],
+        data_file_paths: &FilePaths,
         entries: &HashMap<String, CascKeyMappingTableEntry>,
     ) -> Result<RootHandler, CascError> {
         // Get the "vfs-root" key from config
@@ -301,7 +299,12 @@ impl CascStorage {
 
         for span in &entry.spans {
             if let Some(e) = self.entries.get(&span.base64_encoding_key) {
-                let path = &self.data_file_paths[e.archive_index as usize];
+                let path = &self.data_file_paths.get(&e.archive_index).ok_or_else(|| {
+                    CascError::FileNotFound(format!(
+                        "Data file not found for archive index: {}",
+                        e.archive_index
+                    ))
+                })?;
                 let mut reader = File::open(path)?;
                 reader.seek(SeekFrom::Start(e.offset))?;
 
@@ -358,14 +361,20 @@ impl CascStorage {
     }
 
     pub(crate) fn open_file_from_entry(
-        data_file_paths: &[std::path::PathBuf],
+        data_file_paths: &FilePaths,
         entry: &CascKeyMappingTableEntry,
     ) -> Result<CascFile, CascError> {
         let mut virtual_offset = 0u64;
         let mut spans: Vec<CascFileSpan<File>> = Vec::new();
 
         // Open a new file handle for independent reading
-        let mut reader = File::open(&data_file_paths[entry.archive_index as usize])?;
+        let path = data_file_paths.get(&entry.archive_index).ok_or_else(|| {
+            CascError::FileNotFound(format!(
+                "Data file not found for archive index: {}",
+                entry.archive_index
+            ))
+        })?;
+        let mut reader = File::open(path)?;
         reader.seek(SeekFrom::Start(entry.offset))?;
 
         // Read and discard the span header
