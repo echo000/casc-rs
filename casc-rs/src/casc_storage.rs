@@ -1,5 +1,4 @@
 use base64::{engine::general_purpose, prelude::*};
-use glob::glob;
 use hex;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -189,14 +188,17 @@ impl CascStorage {
     }
 
     fn load_data_files(data_path: &str) -> Result<FilePaths, CascError> {
-        let pattern = format!("{data_path}/data.*");
-        let mut indexed_files: HashMap<u32, PathBuf> = HashMap::new();
+        let mut indexed_files: FilePaths = HashMap::new();
 
-        for entry in glob(&pattern).expect("Failed to read glob pattern") {
-            let path = entry.map_err(|e| CascError::Other(format!("{e}")))?;
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if let Ok(index) = ext.parse::<usize>() {
-                    indexed_files.insert(index as u32, path);
+        for entry in fs::read_dir(data_path).map_err(CascError::Io)? {
+            let path = entry.map_err(CascError::Io)?.path();
+
+            // Require basename "data" and a numeric extension
+            if path.file_stem().and_then(|s| s.to_str()) == Some("data") {
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    if let Ok(index) = ext.parse::<u32>() {
+                        indexed_files.insert(index, path);
+                    }
                 }
             }
         }
@@ -228,8 +230,7 @@ impl CascStorage {
         })?;
 
         // Open the stream
-        let mut stream = Self::open_file_from_entry(data_file_paths, entry)
-            .map_err(|_| CascError::Other("Failed to open entry file".to_string()))?;
+        let mut stream = Self::open_file_from_entry(data_file_paths, entry)?;
 
         // Read the first 4 bytes
         let mut header_buf = [0u8; 4];
