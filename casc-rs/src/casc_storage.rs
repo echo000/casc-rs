@@ -329,6 +329,19 @@ impl CascStorage {
         Ok(CascFile::new(spans, virtual_offset))
     }
 
+    /// Opens a CASC blob by its raw encoding key.
+    ///
+    /// Some CASC consumers receive an encoding key from a nested virtual
+    /// filesystem instead of a name in this storage's root. This method
+    /// provides a small public bridge for that use case; ordinary callers
+    /// should continue to use [`Self::open_file`].
+    pub fn open_file_by_encoding_key(&self, encoding_key: &[u8]) -> Result<CascFile, CascError> {
+        let entry = Self::entry_by_encoding_key(&self.entries, encoding_key)?;
+        let data_file_path = Self::get_data_file_path(&self.data_file_paths, entry.archive_index)?;
+
+        Self::open_file_from_entry(data_file_path, entry)
+    }
+
     pub(crate) fn open_file_from_entry(
         data_file_path: &PathBuf,
         entry: &CascKeyMappingTableEntry,
@@ -338,6 +351,17 @@ impl CascStorage {
         let span = Self::open_file_span(data_file_path, entry, &mut virtual_offset)?;
 
         Ok(CascFile::new(vec![span], virtual_offset))
+    }
+
+    fn entry_by_encoding_key<'a>(
+        entries: &'a HashMap<String, CascKeyMappingTableEntry>,
+        encoding_key: &[u8],
+    ) -> Result<&'a CascKeyMappingTableEntry, CascError> {
+        let base64_key = general_purpose::STANDARD.encode(encoding_key);
+
+        entries
+            .get(&base64_key)
+            .ok_or_else(|| CascError::FileNotFound(format!("Encoding key not found: {base64_key}")))
     }
 
     /// Internal method to get the data file path for a given archive index.
@@ -363,14 +387,7 @@ impl CascStorage {
         let mut reader = File::open(data_file_path)?;
         reader.seek(SeekFrom::Start(entry.offset))?;
 
-        // Check if the first `u32` is `BLTE_HEADER_SIGNATURE`, to skip `CascSpanHeader` we don't need
-        let temp = reader.read_struct::<u32>()?;
-        reader.seek(SeekFrom::Current(-1 * (size_of::<u32>() as i64)))?;
-
-        if temp != BLTE_HEADER_SIGNATURE {
-            // let span_header = reader.read_struct::<CascSpanHeader>()?;
-            reader.seek(SeekFrom::Current(size_of::<CascSpanHeader>() as i64))?;
-        }
+        skip_optional_span_header(&mut reader)?;
 
         // Read Block Table Header
         let header = reader.read_struct::<BlockTableHeader>()?;
@@ -421,5 +438,83 @@ impl CascStorage {
         );
 
         Ok(new_span)
+    }
+}
+
+/// CASC entries can store a BLTE block table either directly at the indexed
+/// offset or after the older 30-byte span header. Only consume the span
+/// header when the indexed bytes are not already the BLTE signature.
+fn skip_optional_span_header<R: Read + Seek>(reader: &mut R) -> Result<(), CascError> {
+    let start = reader.stream_position()?;
+    let mut signature = [0u8; 4];
+    reader.read_exact(&mut signature)?;
+    reader.seek(SeekFrom::Start(start))?;
+
+    if signature != *b"BLTE" {
+        reader.seek(SeekFrom::Current(size_of::<CascSpanHeader>() as i64))?;
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::io::Cursor;
+
+    #[test]
+    fn finds_entry_by_raw_encoding_key() {
+        let encoding_key = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let mut entries = HashMap::new();
+        entries.insert(
+            general_purpose::STANDARD.encode(&encoding_key),
+            CascKeyMappingTableEntry {
+                encoding_key: encoding_key.clone(),
+                offset: 42,
+                size: 7,
+                archive_index: 3,
+            },
+        );
+
+        let entry = CascStorage::entry_by_encoding_key(&entries, &encoding_key)
+            .expect("raw encoding key should find its entry");
+
+        assert_eq!(entry.offset, 42);
+        assert_eq!(entry.archive_index, 3);
+    }
+
+    #[test]
+    fn reports_missing_raw_encoding_key() {
+        let entries = HashMap::new();
+
+        let error = CascStorage::entry_by_encoding_key(&entries, &[1, 2, 3])
+            .expect_err("missing encoding key should return an error");
+
+        assert!(matches!(error, CascError::FileNotFound(_)));
+    }
+
+    #[test]
+    fn accepts_a_direct_blte_entry() {
+        let mut reader = Cursor::new(b"BLTE".to_vec());
+
+        skip_optional_span_header(&mut reader).expect("direct BLTE entry should be accepted");
+
+        assert_eq!(reader.stream_position().unwrap(), 0);
+    }
+
+    #[test]
+    fn skips_a_legacy_span_header_before_blte() {
+        let mut bytes = vec![0u8; size_of::<CascSpanHeader>()];
+        bytes.extend_from_slice(b"BLTE");
+        let mut reader = Cursor::new(bytes);
+
+        skip_optional_span_header(&mut reader)
+            .expect("legacy span header should be consumed before BLTE");
+
+        assert_eq!(
+            reader.stream_position().unwrap(),
+            size_of::<CascSpanHeader>() as u64
+        );
     }
 }
